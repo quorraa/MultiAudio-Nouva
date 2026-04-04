@@ -1,0 +1,34 @@
+<Application x:Class="MultiOutputAudioTester.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFF4F6F8" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#FFD7DEE5" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF0F766E" />
+        <SolidColorBrush x:Key="ErrorBrush" Color="#FFB91C1C" />
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FF1F2937" />
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="MinWidth" Value="92" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="230" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+        </Style>
+        <Style TargetType="ProgressBar">
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+        </Style>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,359 @@
+<Window x:Class="MultiOutputAudioTester.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:helpers="clr-namespace:MultiOutputAudioTester.Helpers"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:MultiOutputAudioTester.ViewModels"
+        mc:Ignorable="d"
+        Title="Multi Output Audio Tester"
+        Width="1500"
+        Height="980"
+        MinWidth="1240"
+        MinHeight="860"
+        Background="{StaticResource WindowBackgroundBrush}"
+        FontFamily="Bahnschrift">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:OutputRouteViewModel}">
+            <Border Margin="0,0,0,14"
+                    Padding="14"
+                    Background="{StaticResource PanelBackgroundBrush}"
+                    BorderBrush="{StaticResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Title}" />
+                            <TextBlock Margin="0,2,0,0"
+                                       Foreground="#FF4B5563"
+                                       Text="{Binding RoleDisplay}" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding IsTimingMaster, Mode=TwoWay}"
+                                  Content="Use As Master" />
+                        <Border Grid.Column="2"
+                                Margin="12,0,0,0"
+                                Padding="8,3"
+                                VerticalAlignment="Center"
+                                Background="#FFE7F1F3"
+                                BorderBrush="{StaticResource PanelBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="999">
+                            <TextBlock Text="{Binding SyncLockState}" />
+                        </Border>
+                        <Button Grid.Column="3"
+                                Margin="12,0,0,0"
+                                Command="{Binding RemoveCommand}"
+                                Content="Remove" />
+                    </Grid>
+
+                    <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                        <ComboBox ItemsSource="{Binding AvailableDevices}"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedItem="{Binding SelectedDevice, Mode=TwoWay}" />
+                        <TextBlock Margin="0,8,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="Output Meter" />
+                        <ProgressBar Maximum="1"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Value="{Binding MeterLevel}" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.3*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock FontWeight="SemiBold" Text="Route Status" />
+                            <TextBlock Margin="0,6,0,0"
+                                   Text="{Binding StatusText}" />
+                            <TextBlock Margin="0,2,0,0"
+                                   Foreground="#FF4B5563"
+                                   Text="{Binding BufferedStatus}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="18,0,18,0">
+                            <TextBlock FontWeight="SemiBold" Text="Volume" />
+                            <Slider Minimum="0"
+                                    Maximum="100"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="False"
+                                    Value="{Binding VolumePercent, Mode=TwoWay}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Text="{Binding VolumeDisplay}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock FontWeight="SemiBold" Text="Manual Delay" />
+                            <Slider Minimum="0"
+                                    Maximum="2000"
+                                    TickFrequency="10"
+                                    IsSnapToTickEnabled="False"
+                                    Value="{Binding DelayMilliseconds, Mode=TwoWay}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Text="{Binding DelayDisplay}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Auto-Sync" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Text="{Binding AutoSyncSummary}" />
+                        <TextBlock Margin="0,2,0,0"
+                                   Foreground="#FF4B5563"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding AutoSyncDetail}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Padding="18"
+                Background="#FF12343B"
+                CornerRadius="14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock FontSize="28"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               Text="Multi Output Audio Tester" />
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="#FFD7E7E7"
+                               Text="Capture one Windows recording endpoint, normalize it to 48 kHz stereo float, then fan it out to as many independently delayed playback routes as you want to test." />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Top">
+                    <Button Command="{Binding AddOutputCommand}" Content="Add Output" />
+                    <Button Command="{Binding RefreshDevicesCommand}" Content="Refresh Devices" />
+                    <Button Command="{Binding RunCalibrationCommand}" Content="Run Calibration" />
+                    <Button Command="{Binding StartCommand}" Content="Start" />
+                    <Button Command="{Binding StopCommand}" Content="Stop" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,16,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.3*" />
+                <ColumnDefinition Width="1.05*" />
+                <ColumnDefinition Width="1.1*" />
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Header="Source">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <ComboBox Grid.Row="0"
+                              ItemsSource="{Binding InputDevices}"
+                              DisplayMemberPath="DisplayName"
+                              SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}" />
+
+                    <CheckBox Grid.Row="1"
+                              Margin="0,14,0,0"
+                              Content="Use built-in 440 Hz test tone instead of live capture"
+                              IsChecked="{Binding UseTestTone, Mode=TwoWay}" />
+
+                    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Master Output Volume" />
+                        <Slider Minimum="0"
+                                Maximum="100"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="False"
+                                Value="{Binding MasterVolumePercent, Mode=TwoWay}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Text="{Binding MasterVolumeDisplay}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Capture Meter" />
+                        <ProgressBar Maximum="1"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Value="{Binding CaptureLevel}" />
+                        <TextBlock Margin="0,6,0,0" Text="{Binding CaptureStatusText}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="4" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Session Status" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Text="{Binding SessionStatusMessage}" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{StaticResource ErrorBrush}"
+                                   Text="{Binding LastErrorMessage}" />
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Grid.Column="1"
+                      Margin="16,0,0,0"
+                      Header="Live Sync">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock FontWeight="SemiBold" Text="Mode" />
+                        <ComboBox ItemsSource="{Binding AutoSyncModes}"
+                                  SelectedItem="{Binding AutoSyncMode, Mode=TwoWay}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Foreground="#FF4B5563"
+                                   Text="Off keeps playback purely manual. Monitor Only listens and reports without touching timing. Control applies live corrections." />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Room Microphone" />
+                        <ComboBox ItemsSource="{Binding InputDevices}"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedItem="{Binding SelectedCalibrationInputDevice, Mode=TwoWay}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Foreground="#FF4B5563"
+                                   TextWrapping="Wrap"
+                                   Text="Used for live sync while music is already playing. The sync target is the listening area near the mic." />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Marker Level" />
+                        <Slider Minimum="0"
+                                Maximum="5"
+                                TickFrequency="0.1"
+                                IsSnapToTickEnabled="False"
+                                Value="{Binding MarkerLevelPercent, Mode=TwoWay}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Text="{Binding MarkerLevelDisplay}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+                        <TextBlock FontWeight="SemiBold" Text="Room Mic Meter" />
+                        <ProgressBar Maximum="1"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Value="{Binding RoomMicLevel}" />
+                    </StackPanel>
+
+                    <Expander Grid.Row="4"
+                              Margin="0,14,0,0"
+                              Header="Fallback Calibration"
+                              IsExpanded="False">
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Foreground="#FF4B5563"
+                                       TextWrapping="Wrap"
+                                       Text="Keep calibration as a fallback/debug path. It pauses playback, runs direct burst measurement, and writes suggested manual delays back into the sliders." />
+                            <TextBlock Margin="0,8,0,0"
+                                       Text="{Binding CalibrationStatusMessage}" />
+                        </StackPanel>
+                    </Expander>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Grid.Column="2"
+                      Margin="16,0,0,0"
+                      Height="320"
+                      VerticalAlignment="Top"
+                      Header="Logs">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0,0,0,8">
+                        <Button Command="{Binding CopyLogsCommand}"
+                                Content="Copy Logs" />
+                        <Button Margin="0,0,0,0"
+                                Command="{Binding ClearLogsCommand}"
+                                Content="Clear" />
+                    </StackPanel>
+                    <ListBox Grid.Row="1"
+                             helpers:ListBoxAutoScrollBehavior.AutoScrollToEnd="True"
+                             ItemsSource="{Binding LogEntries}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock FontFamily="Consolas"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding DisplayText}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </GroupBox>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,0,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Margin="0,0,0,10"
+                    Padding="12"
+                    Background="#FFE6EDF0"
+                    BorderBrush="{StaticResource PanelBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <DockPanel>
+                    <TextBlock FontWeight="SemiBold"
+                               Text="{Binding OutputCount, StringFormat=Active Output Routes: {0}}" />
+                    <TextBlock DockPanel.Dock="Right"
+                               Foreground="#FF4B5563"
+                               Text="Add or remove routes while stopped. The main view uses a two-column board so you can see more outputs at once." />
+                </DockPanel>
+            </Border>
+
+            <ItemsControl Grid.Row="1"
+                          ItemsSource="{Binding Outputs}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </Grid>
+    </Grid>
+</Window>

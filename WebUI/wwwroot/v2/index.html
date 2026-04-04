@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio v2</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+  <!-- ===== TOP TRANSPORT BAR — like a DAW transport ===== -->
+  <header class="transport">
+    <div class="transport-left">
+      <div class="logo">
+        <span class="logo-glyph">M</span>
+        <span class="logo-text">MultiAudio</span>
+      </div>
+      <span id="enginePill" class="engine-pill offline">OFFLINE</span>
+    </div>
+
+    <div class="transport-center">
+      <button id="startBtn" class="transport-btn transport-play" title="Start">
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+      </button>
+      <button id="stopBtn" class="transport-btn transport-stop" title="Stop">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>
+      <button id="calibrateBtn" class="transport-btn" title="Calibrate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      </button>
+      <button id="refreshBtn" class="transport-btn" title="Refresh Devices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+      </button>
+    </div>
+
+    <div class="transport-right">
+      <div class="master-vol-block">
+        <label class="master-label">MASTER</label>
+        <input id="masterVolRange" type="range" min="0" max="100" step="1" class="master-fader">
+        <span id="masterVolValue" class="master-readout">100</span>
+      </div>
+      <div class="zoom-control">
+        <button id="zoomOut" class="zoom-btn" title="Zoom out">-</button>
+        <span id="zoomLevel" class="zoom-readout">100</span>
+        <button id="zoomIn" class="zoom-btn" title="Zoom in">+</button>
+      </div>
+      <div class="theme-picker" id="themePicker">
+        <button class="theme-dot" data-theme="midnight" title="Midnight — Dark mixer console"><span style="background:#00e5a0"></span></button>
+        <button class="theme-dot" data-theme="ember" title="Ember — Industrial forge"><span style="background:#f97316"></span></button>
+        <button class="theme-dot" data-theme="blueprint" title="Blueprint — Engineering schematic"><span style="background:#2970ff"></span></button>
+        <button class="theme-dot" data-theme="hologram" title="Hologram — Prismatic light"><span style="background:conic-gradient(#f06,#f90,#ff0,#0c6,#09f,#c0f,#f06)"></span></button>
+      </div>
+      <a href="../" class="v1-link" title="Switch to v1">v1</a>
+    </div>
+  </header>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <div class="console">
+
+    <!-- ===== LEFT: CONFIG RACK ===== -->
+    <aside class="rack">
+      <div class="rack-module">
+        <div class="rack-label">INPUT SOURCE</div>
+        <select id="inputSelect" class="rack-select"></select>
+      </div>
+      <div class="rack-module">
+        <div class="rack-label">CALIBRATION MIC</div>
+        <select id="calibrationSelect" class="rack-select"></select>
+      </div>
+      <div class="rack-module rack-toggle-row">
+        <label class="rack-toggle">
+          <input id="testToneCheckbox" type="checkbox">
+          <span>440 Hz TEST TONE</span>
+        </label>
+      </div>
+      <div class="rack-module">
+        <div class="rack-label">AUTO-SYNC</div>
+        <div class="sync-switch">
+          <button class="sync-opt" data-sync-mode="Off">OFF</button>
+          <button class="sync-opt" data-sync-mode="MonitorOnly">MON</button>
+          <button class="sync-opt" data-sync-mode="Control">CTRL</button>
+        </div>
+      </div>
+      <div class="rack-module">
+        <div class="rack-label">MARKER LVL <strong id="markerLevelValue">1.6%</strong></div>
+        <input id="markerLevelRange" type="range" min="0" max="5" step="0.1" class="rack-slider">
+      </div>
+
+      <div class="rack-module rack-meters">
+        <div class="vu-wrap">
+          <div class="vu-label">CAP</div>
+          <div class="vu-track"><div id="vuCapture" class="vu-fill"></div></div>
+          <span id="vuCapturePct" class="vu-pct">0</span>
+        </div>
+        <div class="vu-wrap">
+          <div class="vu-label">MIC</div>
+          <div class="vu-track vu-alt"><div id="vuRoom" class="vu-fill vu-fill-alt"></div></div>
+          <span id="vuRoomPct" class="vu-pct">0</span>
+        </div>
+      </div>
+
+      <div class="rack-module rack-status">
+        <div class="rack-stat"><span>Engine</span><strong id="snapEngine">Offline</strong></div>
+        <div class="rack-stat"><span>Sync</span><strong id="snapAutoSync">Off</strong></div>
+        <div class="rack-stat"><span>Master</span><strong id="snapMaster">--</strong></div>
+        <div class="rack-stat"><span>Locked</span><strong id="snapLocked">0</strong></div>
+      </div>
+
+      <div id="lastErrorBanner" class="rack-module rack-error hidden">
+        <div class="rack-label" style="color:var(--red)">ERROR</div>
+        <span id="lastErrorText"></span>
+      </div>
+
+      <!-- Calibration watch (collapsed by default) -->
+      <details class="rack-module rack-cal-details">
+        <summary class="rack-label rack-summary">CALIBRATION</summary>
+        <div class="rack-cal-body">
+          <div class="rack-stat"><span>Status</span><strong id="calTitle">Ready</strong></div>
+          <div class="rack-stat"><span>Mic Health</span><strong id="calMicHealth">Idle</strong></div>
+          <p id="calGuidance" class="rack-cal-hint">Start calibration to measure delays.</p>
+          <div id="calAttemptsList" class="cal-events"></div>
+        </div>
+      </details>
+
+    </aside>
+
+    <!-- ===== CENTER: CHANNEL STRIPS ===== -->
+    <main class="mixer">
+      <div class="mixer-toolbar">
+        <h2 class="mixer-title">CHANNELS</h2>
+        <button id="addOutputBtn" class="add-ch-btn">+ CH</button>
+      </div>
+      <div id="channelStrips" class="channel-strips"></div>
+    </main>
+  </div>
+
+  <!-- ===== BOTTOM LOG DRAWER ===== -->
+  <div class="log-drawer" id="logDrawer">
+    <div class="log-drawer-bar" id="logDrawerToggle">
+      <span class="log-drawer-title">SESSION LOG <span id="logCountLabel" class="log-count">0</span></span>
+      <div class="log-drawer-actions">
+        <button id="copyLogsBtn" class="copy-btn">COPY</button>
+        <span class="log-drawer-arrow" id="logDrawerArrow">&#9650;</span>
+      </div>
+    </div>
+    <div class="log-drawer-body" id="logDrawerBody">
+      <pre id="logOutput" class="log-pre">No log entries yet.</pre>
+    </div>
+  </div>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

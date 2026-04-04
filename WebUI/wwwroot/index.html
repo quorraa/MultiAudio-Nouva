@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Web Widget</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="theme-constellation">
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="ambient ambient-c"></div>
+
+  <div class="app-shell">
+    <header class="hero panel">
+      <div class="hero-topline">
+        <div class="hero-copy">
+          <span class="eyebrow">Hidden Engine, Browser Control</span>
+          <h1>MultiAudio Web Widget</h1>
+          <p>Routing-first control surface for the existing local audio engine.</p>
+        </div>
+        <span id="engineStatePill" class="pill status-pill">Offline</span>
+      </div>
+
+      <div class="mode-bar">
+        <span class="meta-label">Interface Mode</span>
+        <div id="layoutOptions" class="layout-options"></div>
+      </div>
+
+      <div class="hero-actions">
+        <button id="startBtn" class="btn btn-primary">Start Stream</button>
+        <button id="stopBtn" class="btn btn-secondary">Stop</button>
+        <button id="calibrateBtn" class="btn btn-secondary">Run Calibration</button>
+        <button id="refreshBtn" class="btn btn-secondary">Refresh Devices</button>
+        <a href="v2/" class="btn btn-secondary" style="text-align:center;text-decoration:none">Switch to v2</a>
+      </div>
+
+      <section id="calibrationWatch" class="calibration-watch calibration-watch-idle">
+        <div class="calibration-watch-copy">
+          <span class="status-label">Calibration Watch</span>
+          <div class="calibration-watch-headline">
+            <strong id="calibrationWatchTone">Ready</strong>
+            <span id="calibrationWatchStage">Calibration idle.</span>
+          </div>
+          <p id="calibrationWatchGuidance" class="subtle">Start calibration to watch room-mic response and progress here.</p>
+        </div>
+
+        <div class="calibration-watch-meters">
+          <div class="watch-meter-card">
+            <div class="meter-title-row">
+              <span>Room Mic</span>
+              <strong id="calibrationWatchRoomPercent">0%</strong>
+            </div>
+            <div class="meter-track"><div id="calibrationWatchRoomFill" class="meter-fill alt"></div></div>
+          </div>
+
+          <div class="watch-meter-card">
+            <div class="meter-title-row">
+              <span>Capture</span>
+              <strong id="calibrationWatchCapturePercent">0%</strong>
+            </div>
+            <div class="meter-track"><div id="calibrationWatchCaptureFill" class="meter-fill"></div></div>
+          </div>
+        </div>
+
+        <div class="calibration-watch-side">
+          <div class="watch-side-stat">
+            <span class="meta-label">Mic Health</span>
+            <strong id="calibrationWatchMicHealth">Idle</strong>
+          </div>
+          <div class="watch-side-stat">
+            <span class="meta-label">Calibration Mic</span>
+            <strong id="calibrationWatchMicName">Not selected</strong>
+          </div>
+        </div>
+
+        <div class="calibration-watch-attempts">
+          <div class="meter-title-row">
+            <span>Calibration Attempts</span>
+            <strong id="calibrationWatchAttemptsMeta">No recent attempts</strong>
+          </div>
+          <div id="calibrationWatchAttempts" class="calibration-attempt-list"></div>
+        </div>
+      </section>
+
+      <div class="status-strip">
+        <div class="status-chip">
+          <span class="status-label">Session</span>
+          <strong id="sessionStatus">Ready</strong>
+        </div>
+        <div class="status-chip">
+          <span class="status-label">Capture</span>
+          <strong id="captureStatus">Idle</strong>
+        </div>
+        <div class="status-chip">
+          <span class="status-label">Calibration</span>
+          <strong id="calibrationStatus">Calibration idle.</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel control-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Core Controls</span>
+            <h2>Engine Settings</h2>
+          </div>
+          <button id="copyLogsBtn" class="btn btn-ghost compact-btn">Copy Logs</button>
+        </div>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>Capture Input</span>
+            <select id="inputSelect"></select>
+          </label>
+
+          <label class="field">
+            <span>Calibration Mic</span>
+            <select id="calibrationSelect"></select>
+          </label>
+
+          <label class="field checkbox-field">
+            <input id="testToneCheckbox" type="checkbox">
+            <span>Use built-in 440 Hz test tone instead of live capture</span>
+          </label>
+
+          <label class="field range-field">
+            <span>Master Volume <strong id="masterVolumeValue">100%</strong></span>
+            <input id="masterVolumeRange" type="range" min="0" max="100" step="1">
+          </label>
+
+          <div class="field segmented-field">
+            <span>Auto-Sync Mode</span>
+            <div class="segmented">
+              <button class="segmented-btn" data-sync-mode="Off">Off</button>
+              <button class="segmented-btn" data-sync-mode="MonitorOnly">Monitor</button>
+              <button class="segmented-btn" data-sync-mode="Control">Control</button>
+            </div>
+          </div>
+
+          <label class="field range-field">
+            <span>Marker Level <strong id="markerLevelValue">1.6%</strong></span>
+            <input id="markerLevelRange" type="range" min="0" max="5" step="0.1">
+          </label>
+        </div>
+
+        <div class="meter-section">
+          <div class="meter-card">
+            <div class="meter-title-row">
+              <span>Capture Meter</span>
+              <strong id="capturePercent">0%</strong>
+            </div>
+            <div class="meter-track"><div id="captureMeterFill" class="meter-fill"></div></div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title-row">
+              <span>Room Mic Meter</span>
+              <strong id="roomMicPercent">0%</strong>
+            </div>
+            <div class="meter-track"><div id="roomMeterFill" class="meter-fill alt"></div></div>
+          </div>
+        </div>
+
+        <div class="session-meta">
+          <div>
+            <span class="meta-label">Config</span>
+            <strong id="configPath">Loading...</strong>
+          </div>
+          <div>
+            <span class="meta-label">Outputs</span>
+            <strong id="outputCount">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel summary-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">System Pulse</span>
+            <h2>Live Session Snapshot</h2>
+          </div>
+          <button id="clearToastBtn" class="btn btn-ghost compact-btn">Clear Notices</button>
+        </div>
+
+        <div class="quick-stats-grid">
+          <div class="stat-block">
+            <span class="meta-label">Engine</span>
+            <strong id="dockStatus">Offline</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Mode</span>
+            <strong id="dockMode">Constellation</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Capture</span>
+            <strong id="capturePercentMini">0%</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Room Mic</span>
+            <strong id="roomMicPercentMini">0%</strong>
+          </div>
+        </div>
+
+        <div class="quick-stats-grid sync-grid">
+          <div class="stat-block">
+            <span class="meta-label">Locked</span>
+            <strong id="lockedOutputsCount">0</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Low Confidence</span>
+            <strong id="lowConfidenceOutputsCount">0</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Faulted</span>
+            <strong id="faultedOutputsCount">0</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Calibration</span>
+            <strong id="calibrationProgressText">Calibration idle.</strong>
+          </div>
+        </div>
+
+        <div class="system-grid">
+          <div class="stat-block">
+            <span class="meta-label">Capture Source</span>
+            <strong id="summaryInputDevice">Not selected</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Calibration Mic</span>
+            <strong id="summaryCalibrationDevice">Not selected</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Auto-Sync</span>
+            <strong id="summaryAutoSyncMode">MonitorOnly</strong>
+          </div>
+          <div class="stat-block">
+            <span class="meta-label">Timing Master</span>
+            <strong id="summaryTimingMaster">Output 1</strong>
+          </div>
+        </div>
+
+        <div class="mini-widget compact-monitor">
+          <div class="mini-widget-header">
+            <div>
+              <span class="mini-label">Floating Widget Preview</span>
+              <strong>Quick Monitor</strong>
+            </div>
+            <div class="mini-widget-actions">
+              <button id="dockStartBtn" class="btn btn-primary compact-btn">Start</button>
+              <button id="dockStopBtn" class="btn btn-secondary compact-btn">Stop</button>
+            </div>
+          </div>
+
+          <div class="mini-widget-meters">
+            <div>
+              <span>Capture</span>
+              <div class="meter-track slim"><div id="dockCaptureFill" class="meter-fill"></div></div>
+            </div>
+            <div>
+              <span>Room</span>
+              <div class="meter-track slim"><div id="dockRoomFill" class="meter-fill alt"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="lastErrorCard" class="callout error hidden">
+          <span class="meta-label">Last Error</span>
+          <strong id="lastErrorText"></strong>
+        </div>
+      </section>
+
+      <section class="panel routes-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Routing Board</span>
+            <h2>Output Widget Cards</h2>
+          </div>
+          <div class="routes-toolbar">
+            <span class="meta-label">Per-route volume, delay, lock state, and master control</span>
+            <button id="addOutputBtn" class="btn btn-secondary compact-btn">Add Output</button>
+          </div>
+        </div>
+
+        <div id="routesGrid" class="routes-grid"></div>
+      </section>
+
+      <section class="panel logs-panel logs-drawer collapsed">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Diagnostics</span>
+            <h2>Live Session Log</h2>
+          </div>
+          <div class="drawer-toolbar">
+            <span id="logsBadge" class="meta-label">Recent backend events</span>
+            <button id="toggleLogsBtn" class="btn btn-ghost compact-btn">Open Drawer</button>
+          </div>
+        </div>
+
+        <div id="logsDrawerBody" class="logs-drawer-body">
+          <pre id="logOutput" class="log-output"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <aside id="compactDock" class="compact-dock">
+    <div class="compact-dock-header">
+      <div>
+        <span class="eyebrow">Compact Dock</span>
+        <h2>Quick Control</h2>
+      </div>
+      <span id="compactDockState" class="pill">Offline</span>
+    </div>
+    <div class="compact-dock-section">
+      <button id="compactDockStartBtn" class="btn btn-primary compact-btn">Start</button>
+      <button id="compactDockStopBtn" class="btn btn-secondary compact-btn">Stop</button>
+    </div>
+    <div class="compact-dock-section">
+      <label class="field range-field">
+        <span>Master Volume <strong id="compactDockMasterValue">100%</strong></span>
+        <input id="compactDockMasterRange" type="range" min="0" max="100" step="1">
+      </label>
+    </div>
+    <div id="compactDockRoutes" class="compact-dock-routes"></div>
+  </aside>
+
+  <div id="toastStack" class="toast-stack"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
