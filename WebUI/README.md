@@ -45,7 +45,7 @@
 
 ## Run
 
-From `C:\Wizardry\Codex\MultiAudioStreamer`:
+From the repository root:
 
 ```powershell
 dotnet run --project .\WebUI\WebUI.csproj

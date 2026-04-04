@@ -79,7 +79,7 @@ README.md
 
 ## Restore, build, and run
 
-From `C:\Wizardry\Codex\MultiAudioStreamer`:
+From the repository root:
 
 ```powershell
 dotnet restore .\MultiOutputAudioTester.sln
@@ -113,6 +113,27 @@ From Visual Studio:
 4. Use `Add Output` if you need more routes.
 5. Click `Start`.
 6. Confirm each route meter moves and each device is audible.
+
+### Bluetooth device setup
+
+Bluetooth outputs must be paired in Windows and actively connected before they will appear as usable playback targets in the app.
+
+What to do:
+
+1. Pair the speaker or headphones in Windows Bluetooth settings.
+2. Make sure the device shows as connected, not just paired.
+3. Start the app only after the device is connected if you want it to appear immediately in the device list.
+4. If the app is already open when you connect the device, click `Refresh Devices` to re-enumerate the Windows playback endpoints.
+
+Reference screenshots:
+
+Paired device in Windows Bluetooth settings:
+
+![Paired Bluetooth device](WindowsBluetoothSetup/Screenshot%202026-04-04%20192915.png)
+
+Connected device in Windows Bluetooth settings:
+
+![Connected Bluetooth device](WindowsBluetoothSetup/Screenshot%202026-04-04%20192930.png)
 
 ### Built-in test tone mode
 
