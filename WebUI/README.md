@@ -57,6 +57,44 @@ Then open:
 http://localhost:5057
 ```
 
+The app now opens the default browser automatically on startup.
+
+To suppress browser auto-open for automation or headless runs:
+
+```powershell
+$env:MULTIAUDIO_NO_BROWSER=1
+dotnet run --project .\WebUI\WebUI.csproj
+```
+
+## Packaging
+
+Portable build:
+
+```powershell
+.\scripts\publish-portable.ps1
+```
+
+Versioned portable build:
+
+```powershell
+.\scripts\publish-portable.ps1 -Version 0.1.0
+```
+
+Installer build with Inno Setup 6:
+
+```powershell
+.\scripts\build-installer.ps1 -Version 0.1.0
+```
+
+Outputs:
+
+- Portable app folder:
+  `dist\portable\win-x64\app`
+- Portable zip:
+  `dist\portable\MultiAudioNouva-<version>-win-x64-portable.zip`
+- Installer:
+  `dist\installer\MultiAudioNouva-<version>-setup.exe`
+
 ## Recommended next steps
 
 If you want this to feel even more like a desktop widget later without changing the backend again, the best follow-up path is:

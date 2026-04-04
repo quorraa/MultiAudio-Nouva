@@ -4,9 +4,24 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <AssemblyName>MultiAudioNouva</AssemblyName>
+    <Product>MultiAudio Nouva</Product>
+    <Description>Local browser control surface and hidden engine host for MultiAudio Nouva.</Description>
+    <Company>Quorraa</Company>
+    <Authors>Quorraa</Authors>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <UseAppHost>true</UseAppHost>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MultiOutputAudioTester\MultiOutputAudioTester.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="artifacts\**;artifacts_*\**;obj\**;_verify\**;*.log;README.md" />
+    <None Remove="artifacts\**;artifacts_*\**;obj\**;_verify\**;*.log;README.md" />
   </ItemGroup>
 </Project>

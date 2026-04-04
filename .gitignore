@@ -2,6 +2,8 @@
 bin/
 obj/
 altbin/
+dist/
+WebUI/artifacts_*/
 
 # IDE
 .vs/

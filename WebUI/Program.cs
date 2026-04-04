@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Net;
@@ -30,10 +31,12 @@ builder.Services.AddSingleton<AudioControlService>();
 builder.Services.AddSingleton<IHostedService>(serviceProvider => serviceProvider.GetRequiredService<AudioControlService>());
 
 var app = builder.Build();
+var launchUrl = $"http://localhost:{port}";
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
-    Console.WriteLine($"MultiAudio Nouva Web Widget listening on http://localhost:{port}");
+    Console.WriteLine($"MultiAudio Nouva Web Widget listening on {launchUrl}");
+    TryOpenBrowser(launchUrl);
 });
 
 app.Use(async (context, next) =>
@@ -201,4 +204,31 @@ static int GetEphemeralPort()
     {
         listener.Stop();
     }
+}
+
+static void TryOpenBrowser(string url)
+{
+    var disableBrowserLaunch = Environment.GetEnvironmentVariable("MULTIAUDIO_NO_BROWSER");
+    if (string.Equals(disableBrowserLaunch, "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(disableBrowserLaunch, "true", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await Task.Delay(750);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Ignore browser-launch failures; the server is already running and the URL is printed.
+        }
+    });
 }
