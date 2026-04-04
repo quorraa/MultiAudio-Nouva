@@ -1,8 +1,8 @@
-# Multi Output Audio Tester
+# MultiAudio Nouva
 
-`MultiOutputAudioTester` is a Windows-only WPF desktop app for early local testing of one captured audio source duplicated to three playback devices at once. The v1 target is practicality: choose a recording endpoint like Stereo Mix or a Virtual Audio Cable input, choose exactly three playback devices, then stream the same normalized live audio to all three while tuning delay and volume per output.
+`MultiAudio Nouva` is the project name for this Windows-first multi-output audio routing and sync toolset. The current desktop implementation lives in the `MultiOutputAudioTester` project, which is the WPF host used for early local testing of one captured audio source duplicated to three playback devices at once. The v1 target is practicality: choose a recording endpoint like Stereo Mix or a Virtual Audio Cable input, choose exactly three playback devices, then stream the same normalized live audio to all three while tuning delay and volume per output.
 
-## Web UI Progress
+## MultiAudio Nouva Web UI Progress
 
 The project now also includes a local browser control surface in `WebUI` with multiple routes:
 

@@ -1,6 +1,6 @@
-# MultiAudio Web Widget
+# MultiAudio Nouva Web Widget
 
-`WebUI` is a Windows-only ASP.NET Core wrapper around the existing `MultiOutputAudioTester` backend. It keeps the audio engine local and hidden, then exposes a polished browser control surface at `http://localhost:5057`.
+`WebUI` is a Windows-only ASP.NET Core wrapper around the existing `MultiOutputAudioTester` backend for `MultiAudio Nouva`. It keeps the audio engine local and hidden, then exposes a polished browser control surface at `http://localhost:5057`.
 
 ## What this gives you
 

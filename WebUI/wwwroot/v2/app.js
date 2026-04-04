@@ -1,4 +1,4 @@
-/* ===== MultiAudio v2 — Mixer Console JS ===== */
+/* ===== MultiAudio Nouva v2 — Mixer Console JS ===== */
 
 const POLL_MS = 2000;
 const SAFETY_MS = 1000;

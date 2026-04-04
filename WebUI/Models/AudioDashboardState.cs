@@ -4,7 +4,7 @@ namespace WebUI.Models;
 
 public sealed class AudioDashboardState
 {
-    public string AppTitle { get; init; } = "MultiAudio Web Widget";
+    public string AppTitle { get; init; } = "MultiAudio Nouva Web Widget";
 
     public long StateRevision { get; init; }
 

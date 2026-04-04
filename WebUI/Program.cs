@@ -33,7 +33,7 @@ var app = builder.Build();
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
-    Console.WriteLine($"MultiAudio Web Widget listening on http://localhost:{port}");
+    Console.WriteLine($"MultiAudio Nouva Web Widget listening on http://localhost:{port}");
 });
 
 app.Use(async (context, next) =>
