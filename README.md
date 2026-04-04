@@ -2,6 +2,28 @@
 
 `MultiOutputAudioTester` is a Windows-only WPF desktop app for early local testing of one captured audio source duplicated to three playback devices at once. The v1 target is practicality: choose a recording endpoint like Stereo Mix or a Virtual Audio Cable input, choose exactly three playback devices, then stream the same normalized live audio to all three while tuning delay and volume per output.
 
+## Web UI Progress
+
+The project now also includes a local browser control surface in `WebUI` with multiple routes:
+
+- `v1` at `/`
+- `v2` at `/v2/`
+- `v2-Codex` at `/v2-Codex/`
+
+Current screenshots:
+
+### WebUI v1
+
+![WebUI v1](docs/screenshots/webui-v1.png)
+
+### WebUI v2
+
+![WebUI v2](docs/screenshots/webui-v2.png)
+
+### WebUI v2-Codex
+
+![WebUI v2-Codex](docs/screenshots/webui-v2-codex.png)
+
 ## Stack
 
 - Windows desktop app

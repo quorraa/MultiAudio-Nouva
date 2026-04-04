@@ -1,11 +1,10 @@
-/* ===== MultiAudio v2 — Mixer Console JS ===== */
+/* ===== MultiAudio v2-Codex — Mixer Console JS ===== */
 
 const POLL_MS = 2000;
 const SAFETY_MS = 1000;
 const STALE_MS = 4000;
 const TELE_STALE_MS = 2500;
 const TELE_POLL_MS = 90;
-const INTERACT_PAUSE_MS = 900;
 const SETTINGS_DEBOUNCE_MS = 220;
 const ROUTE_DEBOUNCE_MS = 140;
 const HOLD_MS = 120;
@@ -15,7 +14,6 @@ let state = null;
 let telemetryState = null;
 let pollInFlight = false;
 let telePollInFlight = false;
-let interactionPauseUntil = 0;
 let settingsTimer = null;
 let evStream = null;
 let teleStream = null;
@@ -30,13 +28,13 @@ let lastTeleAt = 0;
 const routeTimers = new Map();
 const drafts = new Map();
 const pending = new Set();
-const diagOpen = new Set(jsonStore("v2.diag", []));
+const diagOpen = new Set(jsonStore("v2_codex.diag", []));
 
 const $ = id => document.getElementById(id);
 const el = {
   startBtn: $("startBtn"), stopBtn: $("stopBtn"), calibrateBtn: $("calibrateBtn"),
   refreshBtn: $("refreshBtn"), addOutputBtn: $("addOutputBtn"),
-  copyLogsBtn: $("copyLogsBtn"), enginePill: $("enginePill"),
+  copyLogsBtn: $("copyLogsBtn"), enginePill: $("enginePill"), engineDetail: $("engineDetail"),
   inputSelect: $("inputSelect"), calibrationSelect: $("calibrationSelect"),
   testToneCheckbox: $("testToneCheckbox"),
   masterVolRange: $("masterVolRange"), masterVolValue: $("masterVolValue"),
@@ -44,23 +42,35 @@ const el = {
   vuCapture: $("vuCapture"), vuRoom: $("vuRoom"),
   vuCapturePct: $("vuCapturePct"), vuRoomPct: $("vuRoomPct"),
   snapEngine: $("snapEngine"), snapAutoSync: $("snapAutoSync"),
-  snapMaster: $("snapMaster"), snapLocked: $("snapLocked"),
+  snapMaster: $("snapMaster"), snapLocked: $("snapLocked"), snapLow: $("snapLow"), snapFaulted: $("snapFaulted"),
+  overviewSession: $("overviewSession"), overviewSessionText: $("overviewSessionText"),
+  overviewCapture: $("overviewCapture"), overviewCaptureText: $("overviewCaptureText"),
+  overviewCalibration: $("overviewCalibration"), overviewCalibrationText: $("overviewCalibrationText"),
+  overviewMaster: $("overviewMaster"), overviewSync: $("overviewSync"),
+  overviewLocked: $("overviewLocked"), overviewLow: $("overviewLow"), overviewFaulted: $("overviewFaulted"),
+  configPathText: $("configPathText"),
   lastErrorBanner: $("lastErrorBanner"), lastErrorText: $("lastErrorText"),
-  calTitle: $("calTitle"), calMicHealth: $("calMicHealth"),
-  calGuidance: $("calGuidance"), calAttemptsList: $("calAttemptsList"),
+  calTone: $("calTone"), calStage: $("calStage"), calMicHealth: $("calMicHealth"),
+  calMicName: $("calMicName"), calGuidance: $("calGuidance"),
+  calRoomFill: $("calRoomFill"), calRoomPct: $("calRoomPct"),
+  calCaptureFill: $("calCaptureFill"), calCapturePct: $("calCapturePct"),
+  calAttemptsMeta: $("calAttemptsMeta"), calAttemptsList: $("calAttemptsList"),
+  watchMode: $("watchMode"), sessionMessage: $("sessionMessage"),
+  captureMessage: $("captureMessage"), calibrationMessage: $("calibrationMessage"),
+  logDrawer: $("logDrawer"), logDrawerToggle: $("logDrawerToggle"),
   logOutput: $("logOutput"), logCountLabel: $("logCountLabel"),
-  channelStrips: $("channelStrips"), toastStack: $("toastStack"),
+  channelStrips: $("channelStrips"), toastStack: $("toastStack"), zoomLevel: $("zoomLevel"),
 };
 
 // ===== ZOOM =====
 const ZOOM_MIN = 80;
-const ZOOM_MAX = 200;
+const ZOOM_MAX = 180;
 const ZOOM_STEP = 10;
-let zoomLevel = Number(localStorage.getItem("v2.zoom")) || 120;
+let zoomLevel = Number(localStorage.getItem("v2_codex.zoom")) || 100;
 
 // ===== THEMES =====
 const THEMES = ["midnight", "ember", "blueprint", "hologram"];
-let currentTheme = localStorage.getItem("v2.theme") || "midnight";
+let currentTheme = localStorage.getItem("v2_codex.theme") || "midnight";
 if (!THEMES.includes(currentTheme)) currentTheme = "midnight";
 
 boot();
@@ -77,16 +87,16 @@ async function boot() {
 }
 
 function applyTheme() {
-  document.body.className = currentTheme === "midnight" ? "" : `theme-${currentTheme}`;
-  localStorage.setItem("v2.theme", currentTheme);
+  document.body.className = currentTheme === "midnight" ? "v25-shell" : `v25-shell theme-${currentTheme}`;
+  localStorage.setItem("v2_codex.theme", currentTheme);
   document.querySelectorAll(".theme-dot").forEach(b => b.classList.toggle("active", b.dataset.theme === currentTheme));
   if (state) renderStrips();
 }
 
 function applyZoom() {
   document.body.style.zoom = `${zoomLevel}%`;
-  $("zoomLevel").textContent = zoomLevel;
-  localStorage.setItem("v2.zoom", zoomLevel);
+  el.zoomLevel.textContent = zoomLevel;
+  localStorage.setItem("v2_codex.zoom", zoomLevel);
 }
 
 function bindEvents() {
@@ -97,8 +107,8 @@ function bindEvents() {
   el.calibrateBtn.onclick = handleCalibrate;
   el.copyLogsBtn.onclick = copyLogs;
 
-  $("logDrawerToggle").onclick = () => {
-    $("logDrawer").classList.toggle("open");
+  el.logDrawerToggle.onclick = () => {
+    el.logDrawer.classList.toggle("open");
   };
 
   $("zoomIn").onclick = () => { zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP); applyZoom(); };
@@ -114,7 +124,7 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-sync-mode]").forEach(b => {
-    b.onclick = () => { if (!state) return; markInteract(); setSyncMode(b.dataset.syncMode); queueSettings(); };
+    b.onclick = () => { if (!state) return; setSyncMode(b.dataset.syncMode); queueSettings(); };
   });
 
   el.channelStrips.addEventListener("input", handleChInput);
@@ -152,10 +162,9 @@ function startTelePoll() { if (telePollTimer) return; telePollTimer = setInterva
 
 async function refreshState(force) {
   if (pollInFlight) return;
-  if (!force && Date.now() < interactionPauseUntil) return;
   pollInFlight = true;
   try { lastStateAt = Date.now(); setState(await api("/api/state")); }
-  catch (e) { toast(e.message || "Failed to load state."); }
+  catch (e) { if (force) toast(e.message || "Failed to load state."); }
   finally { pollInFlight = false; }
 }
 
@@ -168,9 +177,8 @@ async function refreshTele(force) {
 }
 
 function safety() {
-  if (!window.EventSource) return;
   if (Date.now() - lastStateAt > STALE_MS) refreshState(true);
-  if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTeleAt > TELE_STALE_MS) connectTele();
+  if (shouldTreatAsLive() && Date.now() - lastTeleAt > TELE_STALE_MS) connectTele();
 }
 
 // ===== API =====
@@ -225,19 +233,24 @@ function render() {
   if (!state) return;
   renderTransport();
   renderRack();
+  renderOverview();
   renderStrips();
   renderCal();
   renderLogs();
 }
 
 function renderTransport() {
-  const mode = state.isCalibrating ? "calibrating" : state.isRunning ? "live" : "offline";
+  const mode = currentMode();
   el.enginePill.className = `engine-pill ${mode}`;
-  el.enginePill.textContent = mode.toUpperCase();
+  el.enginePill.textContent = modeLabel(mode).toUpperCase();
+  el.engineDetail.textContent = state.sessionStatusMessage || "Session idle";
   el.startBtn.disabled = !state.canStart; el.stopBtn.disabled = !state.canStop;
   el.refreshBtn.disabled = !state.canRefreshDevices; el.addOutputBtn.disabled = !state.canAddOutput;
   el.calibrateBtn.title = state.isCalibrating ? "Cancel Calibration" : "Run Calibration";
+  el.calibrateBtn.setAttribute("aria-label", state.isCalibrating ? "Cancel calibration" : "Run calibration");
   el.calibrateBtn.disabled = calibInFlight || (!state.canRunCalibration && !state.isCalibrating);
+  setR(el.masterVolRange, state.masterVolumePercent);
+  syncLabels();
 }
 
 function renderRack() {
@@ -254,14 +267,32 @@ function renderRack() {
   el.vuCapturePct.textContent = Math.round((state.captureLevel || 0) * 100);
   el.vuRoomPct.textContent = Math.round((state.roomMicLevel || 0) * 100);
 
-  el.snapEngine.textContent = state.isCalibrating ? "Calibrating" : state.isRunning ? "Streaming" : "Offline";
+  el.snapEngine.textContent = modeLabel(currentMode());
   el.snapAutoSync.textContent = titleCase(state.autoSyncMode);
   const master = state.outputs?.find(o => o.isTimingMaster);
   el.snapMaster.textContent = master ? `CH${master.slotIndex}` : "--";
   el.snapLocked.textContent = String(state.lockedOutputCount || state.lockedOutputsCount || 0);
+  el.snapLow.textContent = String(state.lowConfidenceOutputCount || state.lowConfidenceOutputsCount || 0);
+  el.snapFaulted.textContent = String(state.faultedOutputCount || state.faultedOutputsCount || 0);
 
   if (state.lastErrorMessage) { el.lastErrorBanner.classList.remove("hidden"); el.lastErrorText.textContent = state.lastErrorMessage; }
   else el.lastErrorBanner.classList.add("hidden");
+}
+
+function renderOverview() {
+  const master = state.outputs?.find(o => o.isTimingMaster);
+  el.overviewSession.textContent = modeLabel(currentMode());
+  el.overviewSessionText.textContent = state.sessionStatusMessage || "Waiting for the engine to start.";
+  el.overviewCapture.textContent = state.captureStatusText || "Idle";
+  el.overviewCaptureText.textContent = selectedInputName();
+  el.overviewCalibration.textContent = state.calibrationProgressMessage || "Calibration idle.";
+  el.overviewCalibrationText.textContent = state.calibrationStatusMessage || "Ready when you are.";
+  el.overviewMaster.textContent = master ? `CH${master.slotIndex}` : "--";
+  el.overviewSync.textContent = `Sync mode ${titleCase(state.autoSyncMode)}`;
+  el.overviewLocked.textContent = String(state.lockedOutputCount || state.lockedOutputsCount || 0);
+  el.overviewLow.textContent = String(state.lowConfidenceOutputCount || state.lowConfidenceOutputsCount || 0);
+  el.overviewFaulted.textContent = String(state.faultedOutputCount || state.faultedOutputsCount || 0);
+  el.configPathText.textContent = state.configPath || "Loading...";
 }
 
 function renderStrips() {
@@ -287,27 +318,27 @@ function renderStrip(o) {
         ${o.isSolo ? '<span class="ch-pill ch-pill-solo">SOLO</span>' : ""}
       </div>
     </div>
-    <div class="ch-device"><select data-field="device" ${state.canEditTopology ? "" : "disabled"}>${devOpts}</select></div>
+    <div class="ch-device"><select data-field="device" name="channel-${o.slotIndex}-device" aria-label="Playback device for channel ${o.slotIndex}" ${state.canEditTopology ? "" : "disabled"}>${devOpts}</select></div>
     <div class="ch-controls">
       <div class="ch-fld">
         <div class="ch-fld-head"><span class="ch-fld-label">VOL</span><span class="ch-fld-val">${Math.round(o.volumePercent)}</span></div>
-        <input data-field="volume" type="range" min="0" max="100" step="1" value="${Math.round(o.volumePercent)}" class="ch-range" ${state.isCalibrating ? "disabled" : ""}>
+        <input data-field="volume" name="channel-${o.slotIndex}-volume" aria-label="Volume for channel ${o.slotIndex}" type="range" min="0" max="100" step="1" value="${Math.round(o.volumePercent)}" class="ch-range" ${state.isCalibrating ? "disabled" : ""}>
         <span class="ch-fld-sub">Applied ${Math.round(o.appliedVolumePercent ?? o.volumePercent)}%</span>
       </div>
       <div class="ch-fld">
         <div class="ch-fld-head"><span class="ch-fld-label">DELAY</span><span class="ch-fld-val">${Math.round(o.delayMilliseconds)}<small>ms</small></span></div>
         <div class="ch-delay-row">
-          <button class="ch-delay-step" data-action="step-delay" data-step="-1" ${state.isCalibrating ? "disabled" : ""}>-</button>
-          <input class="ch-delay-input" data-field="delay-number" type="number" min="0" max="2000" step="1" value="${Math.round(o.delayMilliseconds)}" ${state.isCalibrating ? "disabled" : ""}>
-          <button class="ch-delay-step" data-action="step-delay" data-step="1" ${state.isCalibrating ? "disabled" : ""}>+</button>
+          <button class="ch-delay-step" data-action="step-delay" data-step="-1" aria-label="Decrease delay for channel ${o.slotIndex}" ${state.isCalibrating ? "disabled" : ""}>-</button>
+          <input class="ch-delay-input" data-field="delay-number" name="channel-${o.slotIndex}-delay-number" aria-label="Delay value for channel ${o.slotIndex}" type="number" min="0" max="2000" step="1" value="${Math.round(o.delayMilliseconds)}" ${state.isCalibrating ? "disabled" : ""}>
+          <button class="ch-delay-step" data-action="step-delay" data-step="1" aria-label="Increase delay for channel ${o.slotIndex}" ${state.isCalibrating ? "disabled" : ""}>+</button>
         </div>
-        <input data-field="delay" type="range" min="0" max="2000" step="1" value="${Math.round(o.delayMilliseconds)}" class="ch-range" ${state.isCalibrating ? "disabled" : ""}>
+        <input data-field="delay" name="channel-${o.slotIndex}-delay" aria-label="Delay slider for channel ${o.slotIndex}" type="range" min="0" max="2000" step="1" value="${Math.round(o.delayMilliseconds)}" class="ch-range" ${state.isCalibrating ? "disabled" : ""}>
         <span class="ch-fld-sub">Eff ${Math.round(o.effectiveDelayMilliseconds || o.delayMilliseconds)} ms</span>
       </div>
     </div>
     <div class="ch-meter">
       <div class="ch-meter-bar"><div class="ch-meter-fill" data-meter="${o.slotIndex}" style="width:${routeMeterPct(o.meterLevel)}%"></div></div>
-      <div class="ch-meter-readout"><span data-pct="${o.slotIndex}">${routeMeterLabel(o.meterLevel)}</span><span>${esc(o.syncLockState)}</span></div>
+      <div class="ch-meter-readout"><span data-pct="${o.slotIndex}">${routeMeterLabel(o.meterLevel)}</span><span data-lock="${o.slotIndex}">${esc(o.syncLockState)}</span></div>
     </div>
     <div class="ch-actions">
       <button class="ch-act ${o.isMuted ? "act-muted" : ""}" data-action="mute" ${state.isCalibrating||pp("mute")?"disabled":""}>${o.isMuted?"UNMUTE":"MUTE"}</button>
@@ -332,13 +363,24 @@ function renderStrip(o) {
 
 function renderCal() {
   const w = calModel(telemetryState || state);
-  el.calTitle.textContent = `${w.title} — ${w.stage}`;
+  el.calTone.textContent = w.title;
+  el.calStage.textContent = w.stage;
   el.calMicHealth.textContent = w.micHealth;
   el.calGuidance.textContent = w.guidance;
+  el.calMicName.textContent = selectedCalibrationName();
+  el.watchMode.textContent = modeLabel(currentMode()).toUpperCase();
+  el.sessionMessage.textContent = state.sessionStatusMessage || "Ready";
+  el.captureMessage.textContent = state.captureStatusText || "Idle";
+  el.calibrationMessage.textContent = state.calibrationStatusMessage || "Calibration idle.";
+  vu(el.calRoomFill, (telemetryState || state).roomMicLevel || 0);
+  vu(el.calCaptureFill, (telemetryState || state).captureLevel || 0);
+  el.calRoomPct.textContent = pct((telemetryState || state).roomMicLevel || 0);
+  el.calCapturePct.textContent = pct((telemetryState || state).captureLevel || 0);
   const entries = getCalEntries();
+  el.calAttemptsMeta.textContent = entries.length ? `${entries.length} recent events` : "No recent attempts";
   el.calAttemptsList.innerHTML = entries.length
     ? entries.map(e => `<div class="cal-ev ${e.tone}"><span class="cal-ev-time">${esc(e.time)}</span>${esc(e.text)}</div>`).join("")
-    : "";
+    : `<p class="rack-cal-hint">Attempt-by-attempt calibration feedback will appear here.</p>`;
 }
 
 function renderLogs() {
@@ -351,21 +393,26 @@ function renderLogs() {
 // ===== TELEMETRY PATCH =====
 function patchTele(f) {
   if (!f || !state) return;
-  const mode = f.isCalibrating ? "calibrating" : f.isRunning ? "live" : "offline";
+  const mode = currentMode();
   el.enginePill.className = `engine-pill ${mode}`;
-  el.enginePill.textContent = mode.toUpperCase();
+  el.enginePill.textContent = modeLabel(mode).toUpperCase();
+  el.engineDetail.textContent = f.sessionStatusMessage || state.sessionStatusMessage || "Session idle";
 
   vu(el.vuCapture, f.captureLevel || 0); vu(el.vuRoom, f.roomMicLevel || 0);
   el.vuCapturePct.textContent = Math.round((f.captureLevel || 0) * 100);
   el.vuRoomPct.textContent = Math.round((f.roomMicLevel || 0) * 100);
+  el.snapEngine.textContent = modeLabel(mode);
+  renderOverview();
 
   for (const t of f.outputs || []) {
     const strip = el.channelStrips.querySelector(`[data-slot="${t.slotIndex}"]`);
     if (!strip) continue;
     const fill = strip.querySelector(`[data-meter="${t.slotIndex}"]`);
     const pctEl = strip.querySelector(`[data-pct="${t.slotIndex}"]`);
+    const lockEl = strip.querySelector(`[data-lock="${t.slotIndex}"]`);
     if (fill) fill.style.width = `${routeMeterPct(t.meterLevel)}%`;
     if (pctEl) pctEl.textContent = routeMeterLabel(t.meterLevel);
+    if (lockEl) lockEl.textContent = t.syncLockState || "Disabled";
 
     const status = strip.querySelector(".ch-status");
     if (status) status.textContent = `${t.statusText} · ${t.syncSummary || "Manual"}`;
@@ -389,7 +436,7 @@ function patchTele(f) {
 // ===== CHANNEL EVENT HANDLERS =====
 function handleChInput(e) {
   const strip = e.target.closest("[data-slot]"); if (!strip) return;
-  markInteract(); syncChLabel(strip, e.target.dataset.field); syncDraft(strip);
+  syncChLabel(strip, e.target.dataset.field); syncDraft(strip);
   queueRouteUpdate(strip, e.type === "change");
 }
 
@@ -397,7 +444,6 @@ function handleChClick(e) {
   const btn = e.target.closest("[data-action]"); if (!btn) return;
   const strip = e.target.closest("[data-slot]"); if (!strip) return;
   const slot = +strip.dataset.slot; const action = btn.dataset.action;
-  markInteract();
   if (action === "step-delay") { if (e.detail === 0) nudge(strip, +btn.dataset.step); return; }
   if (action === "remove") { clearRT(slot); runAction(slot, action, () => api(`/api/outputs/${slot}`, { method: "DELETE" })); return; }
   if (action === "mute" || action === "solo") { clearRT(slot); const rb = optToggle(slot, action); runAction(slot, action, () => api(`/api/outputs/${slot}/${action}`, { method: "POST" }), rb); return; }
@@ -411,7 +457,7 @@ function handleChClick(e) {
     syncChLabel(strip); syncDraft(strip); clearRT(slot);
     mutate(() => api(`/api/outputs/${slot}`, { method: "PUT", body: chPayload(strip, false) })); return;
   }
-  if (action === "toggle-diagnostics") { if (diagOpen.has(slot)) diagOpen.delete(slot); else diagOpen.add(slot); localStorage.setItem("v2.diag", JSON.stringify([...diagOpen])); renderStrips(); }
+  if (action === "toggle-diagnostics") { if (diagOpen.has(slot)) diagOpen.delete(slot); else diagOpen.add(slot); localStorage.setItem("v2_codex.diag", JSON.stringify([...diagOpen])); renderStrips(); }
 }
 
 function handleChPointerDown(e) {
@@ -434,7 +480,7 @@ function handleChKey(e) {
 }
 
 // ===== SETTINGS =====
-function handleSettings() { if (!state) return; markInteract(); syncLabels(); queueSettings(); }
+function handleSettings() { if (!state) return; syncLabels(); queueSettings(); }
 
 function handleCalibrate() {
   if (!state || calibInFlight) return;
@@ -442,17 +488,35 @@ function handleCalibrate() {
 }
 
 async function startCal() {
-  calibInFlight = true; renderTransport();
+  calibInFlight = true;
+  applyOptimisticCalibrationState("Preparing route measurements...", "Calibration starting...");
+  renderTransport();
   try { const r = api("/api/calibrate", { method: "POST" }); setTimeout(() => { refreshState(true); refreshTele(true); }, 60); setState(await r); }
   catch (e) { toast(e.message); await refreshState(true); }
   finally { calibInFlight = false; renderTransport(); }
 }
 
 async function cancelCal() {
-  calibInFlight = true; renderTransport();
+  calibInFlight = true;
+  applyOptimisticCalibrationState("Stopping the active calibration run...", "Stopping calibration...");
+  renderTransport();
   try { setState(await api("/api/calibrate/cancel", { method: "POST" })); refreshTele(true); }
   catch (e) { toast(e.message); await refreshState(true); }
   finally { calibInFlight = false; renderTransport(); }
+}
+
+function applyOptimisticCalibrationState(progress, session) {
+  if (!state) return;
+  state.isCalibrating = true;
+  state.canRefreshDevices = false;
+  state.canAddOutput = false;
+  state.canEditTopology = false;
+  state.calibrationStatusMessage = progress;
+  state.calibrationProgressMessage = progress;
+  state.sessionStatusMessage = session;
+  renderTransport();
+  renderOverview();
+  renderCal();
 }
 
 function queueSettings() {
@@ -470,7 +534,7 @@ function queueRouteUpdate(strip, imm) {
 
 function clearRT(s) { const t = routeTimers.get(s); if (t) { clearTimeout(t); routeTimers.delete(s); } }
 
-function startHold(strip, step) { stopHold(); if (!step) return; markInteract(); nudge(strip, step); holdState = { id: setInterval(() => nudge(strip, step), HOLD_MS) }; }
+function startHold(strip, step) { stopHold(); if (!step) return; nudge(strip, step); holdState = { id: setInterval(() => nudge(strip, step), HOLD_MS) }; }
 function stopHold() { if (!holdState) return; clearInterval(holdState.id); holdState = null; }
 
 function nudge(strip, d) {
@@ -559,7 +623,6 @@ function routeMeterDisplay(v) {
 }
 function routeMeterPct(v) { return Math.round(routeMeterDisplay(v) * 100); }
 function routeMeterLabel(v) { return `${routeMeterPct(v)}%`; }
-function markInteract() { interactionPauseUntil = Date.now() + INTERACT_PAUSE_MS; }
 async function copyLogs() { try { await navigator.clipboard.writeText(el.logOutput.textContent || ""); toast("Copied.", "success"); } catch { toast("Failed."); } }
 
 function toast(msg, tone) {
@@ -585,6 +648,34 @@ function getCalEntries() {
   if (telemetryState?.recentCalibrationEntries?.length) return telemetryState.recentCalibrationEntries.map(e => ({ time: e.time || "", text: e.text || "", tone: e.tone || "" }));
   return (state?.logEntries || []).filter(e => /Calibration|burst|stable/i.test(e.displayText)).slice(-6)
     .map(e => ({ time: e.displayText.slice(0,8), text: e.displayText.replace(/^\d{2}:\d{2}:\d{2}\s+\[[A-Z]+\]\s*/,""), tone: /ERROR|fail/i.test(e.displayText)?"danger":/WARN/i.test(e.displayText)?"warn":"" })).reverse();
+}
+
+function currentMode() {
+  if (state?.isCalibrating || telemetryState?.isCalibrating) return "calibrating";
+  if (state?.isRunning || telemetryState?.isRunning) return "live";
+  return "offline";
+}
+
+function modeLabel(mode) {
+  if (mode === "calibrating") return "Calibrating";
+  if (mode === "live") return "Streaming";
+  return "Offline";
+}
+
+function shouldTreatAsLive() {
+  return currentMode() !== "offline";
+}
+
+function selectedInputName() {
+  return state?.inputDevices?.find(d => d.id === state?.selectedInputDeviceId)?.displayName || "Not selected";
+}
+
+function selectedCalibrationName() {
+  return state?.inputDevices?.find(d => d.id === state?.selectedCalibrationInputDeviceId)?.displayName || "Not selected";
+}
+
+function pct(v) {
+  return `${Math.round((v || 0) * 100)}%`;
 }
 
 function findRoute(s) { return state?.outputs?.find(o => o.slotIndex === s) || null; }

@@ -665,9 +665,9 @@ function renderOutputCard(output) {
       <div class="meter-card">
         <div class="meter-title-row">
           <span>Route Meter</span>
-          <strong>${percentText(output.meterLevel)}</strong>
+          <strong>${routeMeterText(output.meterLevel)}</strong>
         </div>
-        <div class="meter-track"><div class="meter-fill" style="width:${Math.round(output.meterLevel * 100)}%"></div></div>
+        <div class="meter-track"><div class="meter-fill" style="width:${routeMeterPercent(output.meterLevel)}%"></div></div>
       </div>
 
       <div class="route-actions">
@@ -829,11 +829,11 @@ function patchOutputTelemetry(outputs) {
     const delayRange = card.querySelector('[data-field="delay"]');
 
     if (routeMeterText) {
-      routeMeterText.textContent = percentText(output.meterLevel);
+      routeMeterText.textContent = routeMeterTextValue(output.meterLevel);
     }
 
     if (routeMeterFill) {
-      routeMeterFill.style.width = `${Math.round(Number(output.meterLevel || 0) * 100)}%`;
+      routeMeterFill.style.width = `${routeMeterPercent(output.meterLevel)}%`;
     }
 
     if (statusLine[0]) {
@@ -1409,6 +1409,29 @@ function updateMeter(element, value) {
 
 function percentText(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
+function routeMeterDisplayLevel(value) {
+  const raw = Math.max(0, Math.min(1, Number(value || 0)));
+  if (raw <= 0.0005) {
+    return 0;
+  }
+
+  const db = 20 * Math.log10(raw);
+  const normalized = Math.max(0, Math.min(1, (db + 48) / 48));
+  return Math.max(0, Math.min(1, Math.pow(normalized, 0.72)));
+}
+
+function routeMeterPercent(value) {
+  return Math.round(routeMeterDisplayLevel(value) * 100);
+}
+
+function routeMeterTextValue(value) {
+  return `${routeMeterPercent(value)}%`;
+}
+
+function routeMeterText(value) {
+  return routeMeterTextValue(value);
 }
 
 function accentForSlot(slotIndex) {

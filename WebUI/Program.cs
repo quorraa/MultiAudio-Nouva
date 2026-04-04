@@ -52,6 +52,19 @@ app.Use(async (context, next) =>
             return;
         }
     }
+    if (path.Equals("/v2-Codex", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v2-Codex/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v2-Codex/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
     await next();
 });
 
