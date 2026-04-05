@@ -27,9 +27,9 @@ Current screenshots:
 ## Stack
 
 - Windows desktop app
-- C# / .NET 8
+- C# / [.NET 8](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
 - WPF UI
-- NAudio for WASAPI capture, playback, metering, and sample-provider plumbing
+- [NAudio](https://www.nuget.org/packages/NAudio/) for WASAPI capture, playback, metering, and sample-provider plumbing
 
 ## Project layout
 
@@ -70,12 +70,19 @@ README.md
 ## Dependencies
 
 - Windows 10/11
-- .NET 8 SDK or newer SDK with the .NET 8 desktop runtime installed
-- Visual Studio 2022 or newer with `.NET desktop development`, or the `dotnet` CLI
-- Internet access for the first NuGet restore so `NAudio` can be downloaded
+- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) or newer SDK with the .NET 8 desktop runtime installed
+- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/community/) or newer with `.NET desktop development`, or the `dotnet` CLI
+- Internet access for the first NuGet restore so [NAudio](https://www.nuget.org/packages/NAudio/) can be downloaded
 - Your existing capture setup:
   - Stereo Mix enabled in Windows if you want to capture system audio that way
-  - or Virtual Audio Cable / VB-CABLE already installed and routed on your machine
+  - or [VB-CABLE / Virtual Audio Cable](https://vb-audio.com/Cable/) already installed and routed on your machine
+
+Get the external dependencies here:
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+- [Visual Studio 2022 Community](https://visualstudio.microsoft.com/vs/community/)
+- [NAudio on NuGet](https://www.nuget.org/packages/NAudio/)
+- [VB-CABLE / Virtual Audio Cable](https://vb-audio.com/Cable/)
 
 ## Restore, build, and run
 
@@ -124,6 +131,8 @@ What to do:
 2. Make sure the device shows as connected, not just paired.
 3. Start the app only after the device is connected if you want it to appear immediately in the device list.
 4. If the app is already open when you connect the device, click `Refresh Devices` to re-enumerate the Windows playback endpoints.
+
+If you are using virtual routing instead of a physical Bluetooth source, install [VB-CABLE](https://vb-audio.com/Cable/) first and make sure its endpoints appear in Windows before launching the app.
 
 Reference screenshots:
 

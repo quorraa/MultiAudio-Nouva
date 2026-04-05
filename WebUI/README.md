@@ -1,6 +1,13 @@
 # MultiAudio Nouva Web Widget
 
-`WebUI` is a Windows-only ASP.NET Core wrapper around the existing `MultiOutputAudioTester` backend for `MultiAudio Nouva`. It keeps the audio engine local and hidden, then exposes a polished browser control surface at `http://localhost:5057`.
+`WebUI` is a Windows-only [ASP.NET Core](https://dotnet.microsoft.com/en-us/apps/aspnet) wrapper around the existing `MultiOutputAudioTester` backend for `MultiAudio Nouva`. It keeps the audio engine local and hidden, then exposes a polished browser control surface at `http://localhost:5057`.
+
+## Dependencies
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) to build and run the app locally
+- [ASP.NET Core](https://dotnet.microsoft.com/en-us/apps/aspnet), included with the .NET 8 SDK/runtime
+- [NAudio on NuGet](https://www.nuget.org/packages/NAudio/) through the referenced backend project
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) if you want to build the Windows installer
 
 ## What this gives you
 
@@ -85,6 +92,10 @@ Installer build with Inno Setup 6:
 ```powershell
 .\scripts\build-installer.ps1 -Version 0.1.0
 ```
+
+Installer dependency:
+
+- [Inno Setup 6](https://jrsoftware.org/isdl.php)
 
 Outputs:
 
