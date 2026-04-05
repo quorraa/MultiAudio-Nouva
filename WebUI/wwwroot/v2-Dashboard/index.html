@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Nouva v2 Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="console-shell dashboard-shell">
+    <header class="top-panel">
+      <div class="brand-block">
+        <div class="brand-plate">MultiAudio</div>
+        <div class="brand-meta">
+          <div class="console-tag">Command Center / v2 Dashboard</div>
+          <h1>MultiAudio Nouva Dashboard</h1>
+        </div>
+        <span id="enginePill" class="engine-pill offline">OFFLINE</span>
+      </div>
+
+      <div class="transport-cluster">
+        <button id="startBtn" class="transport-btn transport-play">Start</button>
+        <button id="stopBtn" class="transport-btn transport-stop">Stop</button>
+        <button id="calibrateBtn" class="transport-btn">Calibrate</button>
+        <button id="refreshBtn" class="transport-btn">Refresh</button>
+      </div>
+
+      <div class="header-tools">
+        <label class="master-strip">
+          <span class="field-label">Master</span>
+          <input id="masterVolRange" type="range" min="0" max="100" step="1">
+          <strong id="masterVolValue">100</strong>
+        </label>
+
+        <div class="route-switch">
+          <label class="route-switch-label" for="variantRouteSelect">Workspace</label>
+          <div class="route-switch-row">
+            <select id="variantRouteSelect" class="route-switch-select">
+              <option value="/">Launch Deck</option>
+              <option value="/v1/">v1 Legacy</option>
+              <option value="/v2/">v2 Control</option>
+              <option value="/v2-Dashboard/">v2 Dashboard</option>
+              <option value="/v2-Codex/">v2-Codex</option>
+              <option value="/v2-Tactile/">v2-Tactile</option>
+            </select>
+            <button id="openVariantRouteBtn" class="transport-btn compact-open-btn">Open</button>
+          </div>
+        </div>
+
+        <button id="layoutLockBtn" class="transport-btn compact-open-btn">Layout Locked</button>
+      </div>
+    </header>
+
+    <div class="console-body">
+      <aside class="side-panel side-panel-left">
+        <section class="panel-module">
+          <div class="tape-label">Signal Intake</div>
+          <label class="module-field">
+            <span>Input Source</span>
+            <select id="inputSelect"></select>
+          </label>
+          <label class="module-field">
+            <span>Calibration Mic</span>
+            <select id="calibrationSelect"></select>
+          </label>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Transport Mode</div>
+          <div class="segmented" id="syncModes">
+            <button class="segmented-btn" data-sync-mode="Off">Off</button>
+            <button class="segmented-btn" data-sync-mode="MonitorOnly">Monitor</button>
+            <button class="segmented-btn" data-sync-mode="Control">Control</button>
+          </div>
+          <label class="toggle-line">
+            <input id="testToneCheckbox" type="checkbox">
+            <span>Use built-in 440 Hz test tone</span>
+          </label>
+          <label class="module-field range-field">
+            <span>Marker Sensitivity <strong id="markerLevelValue">0.0%</strong></span>
+            <input id="markerLevelRange" type="range" min="0" max="5" step="0.1">
+          </label>
+          <div class="engine-readout-wrap">
+            <span class="field-label">Engine</span>
+            <strong id="engineReadout" class="engine-readout">STOP</strong>
+          </div>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Diagnostics Snapshot</div>
+          <div class="status-grid">
+            <div class="status-card"><span>Engine</span><strong id="snapEngine">Offline</strong></div>
+            <div class="status-card"><span>Sync</span><strong id="snapAutoSync">Off</strong></div>
+            <div class="status-card"><span>Master</span><strong id="snapMaster">--</strong></div>
+            <div class="status-card"><span>Locked</span><strong id="snapLocked">0</strong></div>
+          </div>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Signal Meters</div>
+          <div class="meter-row">
+            <span>Capture</span>
+            <div class="meter-track"><div id="vuCapture" class="meter-fill"></div></div>
+            <strong id="vuCapturePct">0</strong>
+          </div>
+          <div class="meter-row">
+            <span>Room Mic</span>
+            <div class="meter-track alt"><div id="vuRoom" class="meter-fill alt"></div></div>
+            <strong id="vuRoomPct">0</strong>
+          </div>
+        </section>
+
+        <section id="lastErrorBanner" class="panel-module error-banner hidden">
+          <div class="tape-label">Error</div>
+          <p id="lastErrorText"></p>
+        </section>
+      </aside>
+
+      <button
+        id="leftResizeHandle"
+        class="layout-handle layout-handle-left"
+        type="button"
+        aria-label="Resize side panels"
+        title="Drag to resize side panels"></button>
+
+      <main class="center-panel">
+        <section class="hero-module panel-module">
+          <div class="hero-copy">
+            <div class="tape-label">Bound Command Surface</div>
+            <h2>Console controls linked to the live map</h2>
+            <p>Select a channel once and both the control console and room alignment stage follow it.</p>
+          </div>
+          <div class="hero-chip-row">
+            <div class="hero-chip">Map-bound Selection</div>
+            <div class="hero-chip">Predictive Sync</div>
+            <button id="addOutputBtn" class="transport-btn compact-open-btn">Add Output</button>
+          </div>
+        </section>
+
+        <section class="panel-module strip-module">
+          <div id="channelStrips" class="channel-strips"></div>
+        </section>
+
+        <section class="command-grid">
+          <section class="panel-module selected-module">
+            <div class="selected-header">
+              <div id="selectedChannelTape" class="tape-label">Selected Route</div>
+              <strong id="selectedChannelStatus" class="selected-status">Idle</strong>
+            </div>
+            <h3 id="selectedChannelName">No route selected</h3>
+            <p id="selectedChannelDevice" class="selected-device-copy">Choose an output strip.</p>
+
+            <div class="selected-metrics">
+              <div class="metric-box">
+                <span>Latency</span>
+                <strong id="selectedLatencyValue">0 ms</strong>
+                <div class="meter-track mini"><div id="selectedLatencyMeter" class="meter-fill"></div></div>
+              </div>
+              <div class="metric-box">
+                <span>Buffer</span>
+                <strong id="selectedBufferValue">0 ms</strong>
+                <div class="meter-track mini"><div id="selectedBufferMeter" class="meter-fill"></div></div>
+              </div>
+              <div class="metric-box">
+                <span>Confidence</span>
+                <strong id="selectedConfidenceValue">0%</strong>
+                <div class="meter-track mini"><div id="selectedConfidenceMeter" class="meter-fill"></div></div>
+              </div>
+              <div class="metric-box">
+                <span>Rate</span>
+                <strong id="selectedRateValue">1.0000x</strong>
+                <div class="meter-track mini"><div id="selectedRateMeter" class="meter-fill alt"></div></div>
+              </div>
+            </div>
+
+            <label class="module-field">
+              <span>Playback Device</span>
+              <select id="selectedDeviceSelect"></select>
+            </label>
+
+            <div class="selected-live-controls">
+              <label class="module-field range-field">
+                <span>Route Volume <strong id="selectedVolumeValue">0%</strong></span>
+                <input id="selectedVolumeRange" type="range" min="0" max="100" step="1">
+              </label>
+              <div class="selected-delay-block">
+                <div class="selected-delay-head">
+                  <span class="field-label">Delay</span>
+                  <strong id="selectedDelayValue">0 ms</strong>
+                </div>
+                <div class="selected-delay-row">
+                  <button id="selectedDelayMinusBtn" class="delay-step">-</button>
+                  <input id="selectedDelayNumber" class="route-delay-input" type="number" min="0" max="2000" step="1" value="0">
+                  <button id="selectedDelayPlusBtn" class="delay-step">+</button>
+                </div>
+                <input id="selectedDelayRange" class="route-slider" type="range" min="0" max="2000" step="1" value="0">
+                <div id="selectedDelayFoot" class="control-foot">Effective 0 ms</div>
+              </div>
+            </div>
+
+            <div class="selected-actions">
+              <button id="selectedMuteBtn" class="transport-btn compact-open-btn">Mute</button>
+              <button id="selectedSoloBtn" class="transport-btn compact-open-btn">Solo</button>
+              <button id="selectedPingBtn" class="transport-btn compact-open-btn">Ping</button>
+              <button id="selectedCopyBtn" class="transport-btn compact-open-btn">Copy</button>
+              <button id="selectedPasteBtn" class="transport-btn compact-open-btn">Paste</button>
+              <button id="selectedMasterBtn" class="transport-btn compact-open-btn">Set Master</button>
+              <button id="selectedRemoveBtn" class="transport-btn compact-open-btn danger-btn">Remove</button>
+            </div>
+          </section>
+
+          <section class="panel-module scope-module">
+            <div class="scope-head">
+              <div>
+                <div class="tape-label">Live Alignment</div>
+                <h3>Room map, mic-centered calibration</h3>
+              </div>
+              <div class="hero-chip">Calibrate</div>
+            </div>
+            <div class="room-scope">
+              <div class="scope-grid"></div>
+              <div class="scope-ring ring-a"></div>
+              <div class="scope-ring ring-b"></div>
+              <div class="scope-ring ring-c"></div>
+              <div class="scope-mic">MIC</div>
+              <div id="roomScopeNodes" class="scope-nodes"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel-module event-module">
+          <div class="module-head-row">
+            <div>
+              <div class="tape-label">Event Stream</div>
+              <h3>Diagnostics log</h3>
+            </div>
+            <div class="module-head-actions">
+              <strong id="logCountLabel" class="event-count">0</strong>
+              <button id="copyLogsBtn" class="transport-btn compact-open-btn">Copy Report</button>
+            </div>
+          </div>
+          <pre id="logOutput" class="log-output">No log entries yet.</pre>
+        </section>
+      </main>
+
+      <button
+        id="rightResizeHandle"
+        class="layout-handle layout-handle-right"
+        type="button"
+        aria-label="Resize side panels"
+        title="Drag to resize side panels"></button>
+
+      <aside class="side-panel side-panel-right">
+        <section class="panel-module">
+          <div class="tape-label">Smart Assist</div>
+          <div class="watch-header">
+            <strong>Useful actions, kept lightweight</strong>
+          </div>
+          <div class="assist-list">
+            <button class="assist-btn" type="button">Rebuild sync from live peaks</button>
+            <button class="assist-btn" type="button">Compensate for Bluetooth drift</button>
+            <button class="assist-btn" type="button">Balance loudness by listening position</button>
+          </div>
+        </section>
+
+        <section class="panel-module">
+          <div class="module-head-row">
+            <div class="tape-label">Selected Output</div>
+            <button id="openDeviceProfileBtn" class="transport-btn compact-open-btn open-folder-btn" type="button">Customize</button>
+          </div>
+          <div class="selected-output-summary">
+            <h3 id="summaryOutputName">No route selected</h3>
+            <p id="summaryOutputDevice" class="selected-device-copy">Choose an output strip.</p>
+            <div class="summary-metric-grid">
+              <div class="metric-box">
+                <span>Delay</span>
+                <strong id="summaryDelayValue">0 ms</strong>
+              </div>
+              <div class="metric-box">
+                <span>Drift</span>
+                <strong id="summaryDriftValue">0.0 ms</strong>
+              </div>
+            </div>
+            <div class="summary-bar-group">
+              <div class="summary-bar-row">
+                <span>Room coherence</span>
+                <strong id="summaryConfidenceValue">0%</strong>
+              </div>
+              <div class="meter-track mini"><div id="summaryConfidenceMeter" class="meter-fill"></div></div>
+            </div>
+            <div class="summary-bar-group">
+              <div class="summary-bar-row">
+                <span>Latency predictability</span>
+                <strong id="summaryRateValue">1.0000x</strong>
+              </div>
+              <div class="meter-track mini"><div id="summaryRateMeter" class="meter-fill alt"></div></div>
+            </div>
+            <button class="transport-btn compact-open-btn open-folder-btn" type="button">Open advanced tuning</button>
+          </div>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Session Pulse</div>
+          <div class="pulse-grid">
+            <div class="status-card"><span>Session</span><strong id="sessionStatus">Ready</strong></div>
+            <div class="status-card"><span>Capture</span><strong id="captureStatus">Idle</strong></div>
+            <div class="status-card"><span>Calibration</span><strong id="calibrationStatus">Idle</strong></div>
+            <div class="status-card"><span>Config</span><button id="openConfigFolderBtn" class="transport-btn compact-open-btn open-folder-btn">Open Folder</button></div>
+          </div>
+          <div class="compact-watch">
+            <div class="watch-header">
+              <strong id="calTitle">Ready</strong>
+              <span id="calMicHealth" class="watch-health">Idle</span>
+            </div>
+            <p id="calGuidance" class="watch-copy">Start calibration to watch pass quality and attempt-by-attempt feedback here.</p>
+            <div id="calAttemptsList" class="cal-attempts"></div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <dialog id="deviceProfileDialog" class="device-profile-dialog">
+    <form method="dialog" class="device-profile-sheet">
+      <div class="module-head-row">
+        <div>
+          <div class="tape-label">Device Customization</div>
+          <h3 id="deviceProfileTitle">Customize output device</h3>
+          <p id="deviceProfileSubtitle" class="selected-device-copy">Rename the speaker and set its icon type.</p>
+        </div>
+      </div>
+      <label class="module-field">
+        <span>Custom Name</span>
+        <input id="deviceProfileAliasInput" class="route-delay-input" type="text" maxlength="80" placeholder="Leave empty to use the Windows device name">
+      </label>
+      <label class="module-field">
+        <span>Device Type</span>
+        <select id="deviceProfileTypeSelect" class="route-device-select">
+          <option value="auto">Auto detect</option>
+          <option value="speaker">Speaker</option>
+          <option value="bookshelf">Bookshelf speakers</option>
+          <option value="soundbar">Soundbar</option>
+          <option value="portable">Portable speaker</option>
+          <option value="headphones">Headphones</option>
+        </select>
+      </label>
+      <div class="device-profile-actions">
+        <button id="deviceProfileCancelBtn" class="transport-btn compact-open-btn" type="button">Cancel</button>
+        <button id="deviceProfileSaveBtn" class="transport-btn compact-open-btn transport-play" type="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

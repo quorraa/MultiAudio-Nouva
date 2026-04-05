@@ -79,6 +79,10 @@ public sealed class OutputRouteState
 
     public string SelectedDeviceName { get; init; } = "Unassigned";
 
+    public string SelectedDeviceOriginalName { get; init; } = "Unassigned";
+
+    public string SelectedDeviceIconType { get; init; } = "auto";
+
     public double VolumePercent { get; init; } = 100;
 
     public double AppliedVolumePercent { get; init; }

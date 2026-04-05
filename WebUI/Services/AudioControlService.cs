@@ -5,6 +5,7 @@ using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using WebUI.Models;
 using System.IO;
+using System.Diagnostics;
 using System.Threading.Channels;
 
 namespace WebUI.Services;
@@ -106,7 +107,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         {
             ApplyConfigLocked(_config);
             RefreshDevicesLocked();
-            _sessionStatusMessage = $"Config path: {_configurationService.ConfigPath}";
+            _sessionStatusMessage = "Configuration loaded.";
         }
 
         _logger.Info("WebUI control service booted.");
@@ -176,7 +177,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
                 CalibrationStatusMessage = _calibrationStatusMessage,
                 CalibrationProgressMessage = _calibrationProgressMessage,
                 LastErrorMessage = _lastErrorMessage,
-                ConfigPath = _configurationService.ConfigPath,
+                ConfigPath = ShortenKnownPath(_configurationService.ConfigPath),
                 AnySoloActive = _outputs.Any(output => output.IsSolo),
                 LockedOutputCount = lockedOutputCount,
                 LowConfidenceOutputCount = lowConfidenceOutputCount,
@@ -248,6 +249,23 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         cancellationToken.Register(() => channel.Writer.TryComplete());
         channel.Writer.TryWrite(GetTelemetryState());
         return channel.Reader;
+    }
+
+    private static string ShortenKnownPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(localAppData) &&
+            path.StartsWith(localAppData, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"%LocalAppData%{path[localAppData.Length..]}";
+        }
+
+        return path;
     }
 
     public async Task<AudioDashboardState> RefreshDevicesAsync()
@@ -491,6 +509,58 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         }
     }
 
+    public async Task<AudioDashboardState> UpdateDeviceProfileAsync(DeviceProfileUpdateRequest request)
+    {
+        await _operationGate.WaitAsync();
+
+        try
+        {
+            lock (_sync)
+            {
+                var normalizedDeviceId = NormalizeDeviceId(request.DeviceId)
+                    ?? throw new InvalidOperationException("Device id is required.");
+
+                var knownDevice =
+                    _playbackDevices.Any(device => StringEquals(device.Id, normalizedDeviceId)) ||
+                    _inputDevices.Any(device => StringEquals(device.Id, normalizedDeviceId));
+
+                if (!knownDevice)
+                {
+                    throw new InvalidOperationException("Device was not found.");
+                }
+
+                var normalizedAlias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim();
+                var normalizedIconType = DeviceProfileConfig.NormalizeIconType(request.IconType);
+
+                if (normalizedAlias is null && string.Equals(normalizedIconType, "auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    _config.DeviceProfiles.Remove(normalizedDeviceId);
+                }
+                else
+                {
+                    _config.DeviceProfiles[normalizedDeviceId] = new DeviceProfileConfig
+                    {
+                        Alias = normalizedAlias,
+                        IconType = normalizedIconType
+                    };
+                    _config.DeviceProfiles[normalizedDeviceId].EnsureDefaults();
+                }
+
+                ReapplyDeviceProfilesLocked();
+                _sessionStatusMessage = "Device customization saved.";
+                _lastErrorMessage = string.Empty;
+            }
+
+            SaveConfigSoon();
+            ScheduleBroadcast(immediate: true);
+            return GetState();
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
     public async Task<AudioDashboardState> ToggleMuteAsync(int slotIndex)
     {
         await _operationGate.WaitAsync();
@@ -596,6 +666,37 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         {
             _operationGate.Release();
         }
+    }
+
+    public Task<AudioDashboardState> OpenConfigFolderAsync()
+    {
+        var configPath = _configurationService.ConfigPath;
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            throw new InvalidOperationException("Config path is unavailable.");
+        }
+
+        var configDirectory = Path.GetDirectoryName(configPath);
+        if (string.IsNullOrWhiteSpace(configDirectory) || !Directory.Exists(configDirectory))
+        {
+            throw new InvalidOperationException("Config directory could not be found.");
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{configPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to open config folder: {ex.Message}");
+        }
+
+        return Task.FromResult(GetState());
     }
 
     public async Task<AudioDashboardState> StartStreamingAsync()
@@ -969,10 +1070,10 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         var playbacks = _deviceService.GetPlaybackDevices().ToList();
 
         _inputDevices.Clear();
-        _inputDevices.AddRange(inputs);
+        _inputDevices.AddRange(inputs.Select(ApplyDeviceProfileLocked));
 
         _playbackDevices.Clear();
-        _playbackDevices.AddRange(playbacks);
+        _playbackDevices.AddRange(playbacks.Select(ApplyDeviceProfileLocked));
 
         _selectedInputDeviceId = ResolveExistingInputIdLocked(_selectedInputDeviceId);
         _selectedCalibrationInputDeviceId = ResolveExistingInputIdLocked(_selectedCalibrationInputDeviceId);
@@ -1485,27 +1586,23 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         }
     }
 
-    private static AudioDeviceInfo CloneDevice(AudioDeviceInfo device)
-    {
-        return new AudioDeviceInfo
-        {
-            Id = device.Id,
-            Name = device.Name,
-            State = device.State,
-            IsActive = device.IsActive
-        };
-    }
+    private AudioDeviceInfo CloneDevice(AudioDeviceInfo device)
+        => device;
 
     private OutputRouteState CloneOutput(MutableOutputRouteState output)
     {
-        var deviceName = _playbackDevices.FirstOrDefault(device => StringEquals(device.Id, output.SelectedDeviceId))?.DisplayName
-            ?? "Unassigned";
+        var device = _playbackDevices.FirstOrDefault(candidate => StringEquals(candidate.Id, output.SelectedDeviceId));
+        var deviceName = device?.DisplayName ?? "Unassigned";
+        var originalName = device?.Name ?? "Unassigned";
+        var iconType = device?.IconType ?? "auto";
 
         return new OutputRouteState
         {
             SlotIndex = output.SlotIndex,
             SelectedDeviceId = output.SelectedDeviceId,
             SelectedDeviceName = deviceName,
+            SelectedDeviceOriginalName = originalName,
+            SelectedDeviceIconType = iconType,
             VolumePercent = output.VolumePercent,
             AppliedVolumePercent = GetAppliedVolumeLocked(output),
             DelayMilliseconds = output.DelayMilliseconds,
@@ -1634,6 +1731,21 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
     {
         return new AppConfig
         {
+            DeviceProfiles = _config.DeviceProfiles
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.Key))
+                .Where(entry =>
+                {
+                    entry.Value?.EnsureDefaults();
+                    return entry.Value is not null && !entry.Value.IsEmpty();
+                })
+                .ToDictionary(
+                    entry => entry.Key,
+                    entry => new DeviceProfileConfig
+                    {
+                        Alias = entry.Value?.Alias,
+                        IconType = entry.Value?.IconType ?? "auto"
+                    },
+                    StringComparer.OrdinalIgnoreCase),
             InputDeviceId = _selectedInputDeviceId,
             CalibrationInputDeviceId = _selectedCalibrationInputDeviceId,
             UseTestTone = _useTestTone,
@@ -1658,6 +1770,45 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         return string.IsNullOrWhiteSpace(deviceId)
             ? null
             : deviceId.Trim();
+    }
+
+    private AudioDeviceInfo ApplyDeviceProfileLocked(AudioDeviceInfo device)
+    {
+        if (!_config.DeviceProfiles.TryGetValue(device.Id, out var profile) || profile is null)
+        {
+            return new AudioDeviceInfo
+            {
+                Id = device.Id,
+                Name = device.Name,
+                Alias = null,
+                IconType = "auto",
+                State = device.State,
+                IsActive = device.IsActive
+            };
+        }
+
+        profile.EnsureDefaults();
+        return new AudioDeviceInfo
+        {
+            Id = device.Id,
+            Name = device.Name,
+            Alias = profile.Alias,
+            IconType = profile.IconType,
+            State = device.State,
+            IsActive = device.IsActive
+        };
+    }
+
+    private void ReapplyDeviceProfilesLocked()
+    {
+        var refreshedInputs = _inputDevices.Select(ApplyDeviceProfileLocked).ToList();
+        var refreshedPlaybacks = _playbackDevices.Select(ApplyDeviceProfileLocked).ToList();
+
+        _inputDevices.Clear();
+        _inputDevices.AddRange(refreshedInputs);
+
+        _playbackDevices.Clear();
+        _playbackDevices.AddRange(refreshedPlaybacks);
     }
 
     private static bool StringEquals(string? left, string? right)

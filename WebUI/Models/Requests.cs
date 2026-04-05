@@ -27,3 +27,12 @@ public sealed class OutputUpdateRequest
 
     public bool IsTimingMaster { get; init; }
 }
+
+public sealed class DeviceProfileUpdateRequest
+{
+    public string DeviceId { get; init; } = string.Empty;
+
+    public string? Alias { get; init; }
+
+    public string? IconType { get; init; }
+}

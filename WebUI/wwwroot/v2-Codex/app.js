@@ -24,6 +24,8 @@ let holdState = null;
 let calibInFlight = false;
 let lastStateAt = 0;
 let lastTeleAt = 0;
+const animatedMeters = new Map();
+let meterAnimationFrame = 0;
 
 const routeTimers = new Map();
 const drafts = new Map();
@@ -117,6 +119,22 @@ function bindEvents() {
   document.querySelectorAll(".theme-dot").forEach(b => {
     b.onclick = () => { currentTheme = b.dataset.theme; applyTheme(); };
   });
+
+  const routeSelect = $("variantRouteSelect");
+  const routeOpenBtn = $("openVariantRouteBtn");
+  if (routeSelect && routeOpenBtn) {
+  const savedRoute = localStorage.getItem("multiAudio.route") || "/v2/";
+    if ([...routeSelect.options].some(option => option.value === savedRoute)) {
+      routeSelect.value = savedRoute;
+    }
+    routeSelect.addEventListener("change", () => {
+      localStorage.setItem("multiAudio.route", routeSelect.value);
+    });
+    routeOpenBtn.addEventListener("click", () => {
+      localStorage.setItem("multiAudio.route", routeSelect.value);
+      window.location.href = routeSelect.value;
+    });
+  }
 
   [el.inputSelect, el.calibrationSelect, el.testToneCheckbox, el.masterVolRange, el.markerLevelRange].forEach(c => {
     c.addEventListener("input", handleSettings);
@@ -410,7 +428,7 @@ function patchTele(f) {
     const fill = strip.querySelector(`[data-meter="${t.slotIndex}"]`);
     const pctEl = strip.querySelector(`[data-pct="${t.slotIndex}"]`);
     const lockEl = strip.querySelector(`[data-lock="${t.slotIndex}"]`);
-    if (fill) fill.style.width = `${routeMeterPct(t.meterLevel)}%`;
+    if (fill) setMeterPercent(fill, routeMeterPct(t.meterLevel));
     if (pctEl) pctEl.textContent = routeMeterLabel(t.meterLevel);
     if (lockEl) lockEl.textContent = t.syncLockState || "Disabled";
 
@@ -613,7 +631,36 @@ function syncChLabel(strip, changed) {
   if (vals[1] && delay) vals[1].innerHTML = `${Math.round(+delay.value)}<small>ms</small>`;
 }
 
-function vu(el, v) { el.style.width = `${Math.max(0, Math.min(100, Math.round((v||0)*100)))}%`; }
+function vu(el, v) { setMeterPercent(el, Number(v || 0) * 100); }
+function setMeterPercent(el, percent) {
+  if (!el) return;
+  const target = Math.max(0, Math.min(100, Number(percent || 0)));
+  const current = animatedMeters.get(el)?.current ?? target;
+  animatedMeters.set(el, { current, target });
+  if (!meterAnimationFrame) meterAnimationFrame = requestAnimationFrame(stepMeters);
+}
+function stepMeters() {
+  meterAnimationFrame = 0;
+  let keepRunning = false;
+  for (const [el, stateEntry] of animatedMeters) {
+    if (!el.isConnected) {
+      animatedMeters.delete(el);
+      continue;
+    }
+    const delta = stateEntry.target - stateEntry.current;
+    if (Math.abs(delta) <= 0.35) {
+      stateEntry.current = stateEntry.target;
+    } else {
+      stateEntry.current += delta * 0.28;
+      keepRunning = true;
+    }
+    el.style.width = `${stateEntry.current.toFixed(2)}%`;
+    if (stateEntry.current === stateEntry.target) {
+      animatedMeters.delete(el);
+    }
+  }
+  if (keepRunning || animatedMeters.size) meterAnimationFrame = requestAnimationFrame(stepMeters);
+}
 function routeMeterDisplay(v) {
   const raw = Math.max(0, Math.min(1, Number(v || 0)));
   if (raw <= 0.0005) return 0;

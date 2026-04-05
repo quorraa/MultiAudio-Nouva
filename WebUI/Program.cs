@@ -42,6 +42,32 @@ app.Lifetime.ApplicationStarted.Register(() =>
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? "";
+    if (path.Equals("/", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/index.html", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("launch/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
+    if (path.Equals("/v1", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v1/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v1/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
     if (path.Equals("/v2", StringComparison.OrdinalIgnoreCase) ||
         path.Equals("/v2/", StringComparison.OrdinalIgnoreCase))
     {
@@ -55,11 +81,50 @@ app.Use(async (context, next) =>
             return;
         }
     }
+    if (path.Equals("/v2-Dashboard", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v2-Dashboard/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v2-Dashboard/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
+    if (path.Equals("/v2-Control", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v2-Control/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v2-Control/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
     if (path.Equals("/v2-Codex", StringComparison.OrdinalIgnoreCase) ||
         path.Equals("/v2-Codex/", StringComparison.OrdinalIgnoreCase))
     {
         var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
         var file = env.WebRootFileProvider.GetFileInfo("v2-Codex/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
+    if (path.Equals("/v2-Tactile", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v2-Tactile/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v2-Tactile/index.html");
         if (file.Exists)
         {
             context.Response.ContentType = "text/html";
@@ -105,6 +170,7 @@ app.MapGet("/api/telemetry", async (HttpContext context, AudioControlService ser
     }
 });
 app.MapPost("/api/refresh-devices", (AudioControlService service) => ExecuteAsync(service.RefreshDevicesAsync));
+app.MapPost("/api/open-config-folder", (AudioControlService service) => ExecuteAsync(service.OpenConfigFolderAsync));
 app.MapPost("/api/start", (AudioControlService service) => ExecuteAsync(service.StartStreamingAsync));
 app.MapPost("/api/stop", (AudioControlService service) => ExecuteAsync(service.StopStreamingAsync));
 app.MapPost("/api/calibrate", (AudioControlService service) => ExecuteAsync(service.RunCalibrationAsync));
@@ -116,6 +182,7 @@ app.MapPost("/api/outputs/{slotIndex:int}/ping", (AudioControlService service, i
 app.MapDelete("/api/outputs/{slotIndex:int}", (AudioControlService service, int slotIndex) => ExecuteAsync(() => service.RemoveOutputAsync(slotIndex)));
 app.MapPut("/api/settings", (AudioControlService service, MainSettingsUpdateRequest request) => ExecuteAsync(() => service.UpdateSettingsAsync(request)));
 app.MapPut("/api/outputs/{slotIndex:int}", (AudioControlService service, int slotIndex, OutputUpdateRequest request) => ExecuteAsync(() => service.UpdateOutputAsync(slotIndex, request)));
+app.MapPut("/api/device-profiles", (AudioControlService service, DeviceProfileUpdateRequest request) => ExecuteAsync(() => service.UpdateDeviceProfileAsync(request)));
 
 app.MapFallbackToFile("index.html");
 

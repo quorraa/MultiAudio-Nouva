@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Nouva Launch Deck</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/launch/app.css">
+</head>
+<body>
+  <div class="neo-shell">
+    <div class="neo-glow neo-glow-a"></div>
+    <div class="neo-glow neo-glow-b"></div>
+    <div class="neo-glow neo-glow-c"></div>
+
+    <main class="command-center">
+      <header class="topbar">
+        <div class="brand-cluster">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64">
+              <defs>
+                <linearGradient id="brandGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+                  <stop offset="0%" stop-color="#59d5ff"></stop>
+                  <stop offset="52%" stop-color="#3b82f6"></stop>
+                  <stop offset="100%" stop-color="#8b5cf6"></stop>
+                </linearGradient>
+              </defs>
+              <rect x="6" y="6" width="52" height="52" rx="18" fill="url(#brandGradient)"></rect>
+              <path d="M22 39V25" stroke="#08111f" stroke-width="4" stroke-linecap="round"></path>
+              <path d="M30 45V19" stroke="#08111f" stroke-width="4" stroke-linecap="round"></path>
+              <path d="M38 34V24" stroke="#08111f" stroke-width="4" stroke-linecap="round"></path>
+              <path d="M46 42V22" stroke="#08111f" stroke-width="4" stroke-linecap="round"></path>
+            </svg>
+          </div>
+          <div class="brand-copy">
+            <div class="brand-title-row">
+              <h1>MultiAudio Nouva</h1>
+              <span id="enginePill" class="top-pill offline"><span class="dot"></span>Live Session</span>
+            </div>
+            <p>Console-style multi-output control with dashboard visibility and room-aware sync.</p>
+          </div>
+        </div>
+
+        <div class="transport-bar">
+          <button id="startBtn" class="transport-btn is-live">Start</button>
+          <button id="stopBtn" class="transport-btn is-stop">Stop</button>
+          <button id="calibrateBtn" class="transport-btn">Calibrate</button>
+          <button id="refreshBtn" class="transport-btn">Refresh routes</button>
+          <div class="master-block">
+            <span>Master</span>
+            <input id="masterVolumeRange" type="range" min="0" max="100" step="1">
+            <strong id="masterVolumeValue">100</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="workspace-strip">
+        <div class="route-switch neo-route-switch">
+          <label class="route-switch-label" for="variantRouteSelect">Workspace</label>
+          <div class="route-switch-row">
+            <select id="variantRouteSelect" class="route-switch-select">
+              <option value="/">Launch Deck</option>
+              <option value="/v1/">v1 Legacy</option>
+              <option value="/v2/">v2 Control</option>
+              <option value="/v2-Dashboard/">v2 Dashboard</option>
+              <option value="/v2-Codex/">v2-Codex</option>
+              <option value="/v2-Tactile/">v2-Tactile</option>
+            </select>
+            <button id="openVariantRouteBtn" class="transport-btn route-switch-btn">Open</button>
+          </div>
+        </div>
+
+        <nav class="workspace-links" aria-label="Workspace links">
+          <a class="workspace-link current" href="/">Launch Deck</a>
+          <a class="workspace-link" href="/v1/">v1 Legacy</a>
+          <a class="workspace-link" href="/v2/">v2 Control</a>
+          <a class="workspace-link" href="/v2-Dashboard/">v2 Dashboard</a>
+          <a class="workspace-link" href="/v2-Codex/">v2-Codex</a>
+          <a class="workspace-link" href="/v2-Tactile/">v2-Tactile</a>
+        </nav>
+      </section>
+
+      <section class="command-grid">
+        <aside class="side-column left-column">
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Source</span>
+              <span class="card-icon">◔</span>
+            </div>
+            <h2>Signal Intake</h2>
+            <label class="field">
+              <span>Input Source</span>
+              <select id="inputSelect"></select>
+            </label>
+            <label class="field">
+              <span>Calibration Mic</span>
+              <select id="calibrationSelect"></select>
+            </label>
+          </section>
+
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Auto Sync</span>
+              <span class="card-icon">✦</span>
+            </div>
+            <h2>Transport Mode</h2>
+            <div class="segmented">
+              <button class="segmented-btn" data-sync-mode="Off">Live</button>
+              <button class="segmented-btn" data-sync-mode="MonitorOnly">Monitor</button>
+              <button class="segmented-btn" data-sync-mode="Control">Manual</button>
+            </div>
+            <label class="field slider-field">
+              <span>Marker sensitivity <strong id="markerLevelValue">0.0%</strong></span>
+              <input id="markerLevelRange" type="range" min="0" max="5" step="0.1">
+            </label>
+            <label class="checkbox-field">
+              <input id="testToneCheckbox" type="checkbox">
+              <span>Use built-in 440 Hz test tone</span>
+            </label>
+            <div class="split-stat-grid">
+              <div class="micro-stat">
+                <span>Engine</span>
+                <strong id="snapEngine">Offline</strong>
+              </div>
+              <div class="micro-stat">
+                <span>Master</span>
+                <strong id="snapMaster">--</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Diagnostics</span>
+              <span class="card-icon">⌘</span>
+            </div>
+            <h2>System Snapshot</h2>
+            <div class="snapshot-list">
+              <div class="snapshot-row">
+                <span>Buffer health</span>
+                <strong id="bufferHealthText">Stable</strong>
+              </div>
+              <div class="snapshot-row">
+                <span>Latency variance</span>
+                <strong id="latencyVarianceText">Low</strong>
+              </div>
+              <div class="snapshot-row">
+                <span>Session uptime</span>
+                <strong id="sessionUptimeText">0m</strong>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="center-column">
+          <section class="surface-card">
+            <div class="surface-head">
+              <div>
+                <span class="eyebrow">Bound Command Surface</span>
+                <h2>Console controls linked to the live map</h2>
+                <p>Select a channel once and both the command focus and room-alignment stage follow it.</p>
+              </div>
+              <div class="surface-pills">
+                <span class="soft-pill">Map-bound selection</span>
+                <span class="soft-pill">Predictive sync</span>
+              </div>
+            </div>
+
+            <div id="channelPills" class="channel-pill-grid"></div>
+
+            <div class="surface-split">
+              <section class="focus-card">
+                <div class="panel-title-row">
+                  <span class="eyebrow">Selected Channel</span>
+                  <span id="selectedFocusTag" class="soft-pill">Focus</span>
+                </div>
+                <h3 id="selectedName">No route selected</h3>
+                <p id="selectedDevice" class="muted-copy">Choose an output route.</p>
+
+                <div class="metric-grid">
+                  <div class="metric-card">
+                    <span>Delay</span>
+                    <strong id="selectedDelay">0 <small>ms</small></strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>Volume</span>
+                    <strong id="selectedVolume">0 <small>%</small></strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>Drift</span>
+                    <strong id="selectedDrift">0 <small>ms</small></strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>Confidence</span>
+                    <strong id="selectedConfidence">0 <small>%</small></strong>
+                  </div>
+                </div>
+
+                <div class="progress-stack">
+                  <div class="progress-row">
+                    <div class="progress-meta">
+                      <span>Room coherence</span>
+                      <strong id="roomCoherenceValue">0%</strong>
+                    </div>
+                    <div class="progress-track"><div id="roomCoherenceFill" class="progress-fill"></div></div>
+                  </div>
+                  <div class="progress-row">
+                    <div class="progress-meta">
+                      <span>Latency predictability</span>
+                      <strong id="latencyPredictabilityValue">0%</strong>
+                    </div>
+                    <div class="progress-track"><div id="latencyPredictabilityFill" class="progress-fill"></div></div>
+                  </div>
+                  <div class="progress-row">
+                    <div class="progress-meta">
+                      <span>Buffer stability</span>
+                      <strong id="bufferStabilityValue">0%</strong>
+                    </div>
+                    <div class="progress-track"><div id="bufferStabilityFill" class="progress-fill"></div></div>
+                  </div>
+                </div>
+
+                <div class="tuning-card">
+                  <span class="eyebrow">Quick Tuning</span>
+                  <div class="tuning-row">
+                    <span>Delay trim</span>
+                    <strong id="tuningDelayText">0 ms</strong>
+                  </div>
+                  <div class="progress-track slim"><div id="tuningDelayFill" class="progress-fill alt"></div></div>
+                  <div class="tuning-row">
+                    <span>Gain balance</span>
+                    <strong id="tuningGainText">0%</strong>
+                  </div>
+                  <div class="progress-track slim"><div id="tuningGainFill" class="progress-fill violet"></div></div>
+                  <div class="tuning-row">
+                    <span>Drift guard</span>
+                    <strong id="tuningDriftText">Adaptive</strong>
+                  </div>
+                  <div class="progress-track slim"><div id="tuningDriftFill" class="progress-fill aqua"></div></div>
+                </div>
+              </section>
+
+              <section class="map-card">
+                <div class="panel-title-row">
+                  <div>
+                    <span class="eyebrow">Live Alignment Stage</span>
+                    <h3>Room map with direct channel targeting</h3>
+                  </div>
+                  <span class="soft-pill">Mic-centered calibration</span>
+                </div>
+
+                <div class="room-map">
+                  <div class="map-grid"></div>
+                  <div class="map-ring map-ring-a"></div>
+                  <div class="map-ring map-ring-b"></div>
+                  <div class="map-ring map-ring-c"></div>
+                  <div class="map-mic">⌁</div>
+                  <div id="roomNodes" class="map-nodes"></div>
+                </div>
+
+                <div id="mapSummaryCards" class="map-summary-grid"></div>
+              </section>
+            </div>
+          </section>
+
+          <section class="event-grid">
+            <section class="event-card">
+              <div class="panel-title-row">
+                <div>
+                  <span class="eyebrow">Event Stream</span>
+                  <h3>Readable diagnostics, kept compact</h3>
+                </div>
+                <button id="copyLogsBtn" class="transport-btn">Copy report</button>
+              </div>
+              <pre id="logOutput" class="event-log">No log entries yet.</pre>
+            </section>
+
+            <section class="pulse-card">
+              <div>
+                <span class="eyebrow">Session Pulse</span>
+                <h3>Fast health summary</h3>
+              </div>
+              <div class="pulse-list">
+                <div class="pulse-row"><span>Engine</span><strong id="sessionEngineText">Offline</strong></div>
+                <div class="pulse-row"><span>Mode</span><strong id="sessionModeText">Off</strong></div>
+                <div class="pulse-row"><span>Master</span><strong id="sessionMasterText">--</strong></div>
+                <div class="pulse-row"><span>Buffer lock</span><strong id="sessionBufferText">0 ms</strong></div>
+                <div class="pulse-row"><span>Config</span><button id="openConfigFolderBtn" class="transport-btn tiny-btn">Open folder</button></div>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <aside class="side-column right-column">
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Smart Assist</span>
+              <span class="assist-glyph">✣</span>
+            </div>
+            <h2>Useful actions, kept lightweight</h2>
+            <div class="assist-list">
+              <button class="assist-btn" type="button" data-assist="refresh">Rebuild sync from live peaks</button>
+              <button class="assist-btn" type="button" data-assist="calibrate">Compensate for Bluetooth drift</button>
+              <button class="assist-btn" type="button" data-assist="control">Balance loudness by listening position</button>
+            </div>
+          </section>
+
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Selected Output</span>
+              <button id="openDeviceProfileBtn" class="transport-btn tiny-btn" type="button">Customize</button>
+            </div>
+            <h2 id="summaryName">No route selected</h2>
+            <p id="summaryDevice" class="muted-copy">Choose an output route.</p>
+            <div class="metric-grid compact-metrics">
+              <div class="metric-card">
+                <span>Delay</span>
+                <strong id="summaryDelay">0 <small>ms</small></strong>
+              </div>
+              <div class="metric-card">
+                <span>Drift</span>
+                <strong id="summaryDrift">0 <small>ms</small></strong>
+              </div>
+            </div>
+            <div class="progress-stack tight-progress">
+              <div class="progress-row">
+                <div class="progress-meta">
+                  <span>Room coherence</span>
+                  <strong id="summaryCoherenceValue">0%</strong>
+                </div>
+                <div class="progress-track"><div id="summaryCoherenceFill" class="progress-fill"></div></div>
+              </div>
+              <div class="progress-row">
+                <div class="progress-meta">
+                  <span>Latency predictability</span>
+                  <strong id="summaryPredictabilityValue">0%</strong>
+                </div>
+                <div class="progress-track"><div id="summaryPredictabilityFill" class="progress-fill"></div></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="console-card">
+            <div class="card-head">
+              <span class="eyebrow">Calibration Watch</span>
+            </div>
+            <div class="watch-headline">
+              <strong id="calibrationTone">Ready</strong>
+              <span id="calibrationMicHealth" class="watch-health">Idle</span>
+            </div>
+            <p id="calibrationStage" class="muted-copy">Calibration idle.</p>
+            <p id="calibrationGuidance" class="watch-guidance">Start calibration to watch the mic response and progress here.</p>
+
+            <div class="watch-meter-grid">
+              <div class="watch-meter-card">
+                <div class="progress-meta">
+                  <span>Room Mic</span>
+                  <strong id="roomPercent">0%</strong>
+                </div>
+                <div class="progress-track"><div id="roomFill" class="progress-fill warm"></div></div>
+              </div>
+              <div class="watch-meter-card">
+                <div class="progress-meta">
+                  <span>Capture</span>
+                  <strong id="capturePercent">0%</strong>
+                </div>
+                <div class="progress-track"><div id="captureFill" class="progress-fill"></div></div>
+              </div>
+            </div>
+
+            <div class="attempt-head">
+              <span class="eyebrow">Attempts</span>
+              <strong id="attemptsMeta">No recent attempts</strong>
+            </div>
+            <div id="attemptsList" class="attempt-list"></div>
+          </section>
+
+          <section id="lastErrorCard" class="console-card error-card hidden">
+            <div class="card-head">
+              <span class="eyebrow">Last Error</span>
+            </div>
+            <p id="lastErrorText"></p>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="deviceProfileDialog" class="device-profile-dialog">
+    <form method="dialog" class="device-profile-sheet">
+      <div class="device-profile-head">
+        <div>
+          <span class="eyebrow">Device Customization</span>
+          <h3 id="deviceProfileTitle">Customize output device</h3>
+          <p id="deviceProfileSubtitle" class="muted-copy">Rename the speaker and pin its icon type.</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Custom Name</span>
+        <input id="deviceProfileAliasInput" type="text" maxlength="80" placeholder="Leave empty to use the Windows device name">
+      </label>
+
+      <label class="field">
+        <span>Device Type</span>
+        <select id="deviceProfileTypeSelect">
+          <option value="auto">Auto detect</option>
+          <option value="speaker">Speaker</option>
+          <option value="bookshelf">Bookshelf speakers</option>
+          <option value="soundbar">Soundbar</option>
+          <option value="portable">Portable speaker</option>
+          <option value="headphones">Headphones</option>
+        </select>
+      </label>
+
+      <div class="device-profile-actions">
+        <button id="deviceProfileCancelBtn" class="transport-btn" type="button">Cancel</button>
+        <button id="deviceProfileSaveBtn" class="transport-btn is-live" type="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script type="module" src="/launch/app.js"></script>
+</body>
+</html>

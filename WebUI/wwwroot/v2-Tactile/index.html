@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Nouva v2-Tactile</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="console-shell">
+    <header class="top-panel">
+      <div class="brand-block">
+        <div class="brand-plate">MultiAudio Nouva</div>
+        <div class="brand-meta">
+          <span class="console-tag">Tactile Console · v2 Alternate</span>
+          <span id="enginePill" class="engine-pill offline">OFFLINE</span>
+        </div>
+      </div>
+
+      <div class="transport-cluster">
+        <button id="startBtn" class="console-btn is-live">Start</button>
+        <button id="stopBtn" class="console-btn">Stop</button>
+        <button id="calibrateBtn" class="console-btn">Calibrate</button>
+        <button id="refreshBtn" class="console-btn">Refresh</button>
+      </div>
+
+      <div class="header-tools">
+        <div class="master-strip">
+          <span class="field-label">Master</span>
+          <input id="masterVolRange" type="range" min="0" max="100" step="1">
+          <strong id="masterVolValue">100</strong>
+        </div>
+        <button id="layoutLockBtn" class="console-btn layout-lock-btn">Layout Locked</button>
+        <div class="route-switch compact-route-switch">
+          <label class="route-switch-label" for="variantRouteSelect">Workspace</label>
+          <div class="route-switch-row">
+            <select id="variantRouteSelect" class="route-switch-select">
+              <option value="/">Launch Deck</option>
+              <option value="/v1/">v1 Legacy</option>
+              <option value="/v2/">v2 Control</option>
+              <option value="/v2-Dashboard/">v2 Dashboard</option>
+              <option value="/v2-Codex/">v2-Codex</option>
+              <option value="/v2-Tactile/">v2-Tactile</option>
+            </select>
+            <button id="openVariantRouteBtn" class="console-btn route-switch-btn">Open</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="console-body">
+      <div class="wood-rail"></div>
+
+      <aside class="side-panel side-panel-left">
+        <section class="panel-module">
+          <div class="tape-label">Signal Source</div>
+          <label class="module-field">
+            <span>Input</span>
+            <select id="inputSelect"></select>
+          </label>
+          <label class="module-field">
+            <span>Calibration Mic</span>
+            <select id="calibrationSelect"></select>
+          </label>
+          <label class="toggle-line">
+            <input id="testToneCheckbox" type="checkbox">
+            <span>Use built-in 440 Hz test tone</span>
+          </label>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Transport</div>
+          <div class="segmented" id="syncModes">
+            <button class="segmented-btn" data-sync-mode="Off">Off</button>
+            <button class="segmented-btn" data-sync-mode="MonitorOnly">Monitor</button>
+            <button class="segmented-btn" data-sync-mode="Control">Control</button>
+          </div>
+          <div class="engine-readout-wrap">
+            <span class="field-label">Engine</span>
+            <strong id="engineReadout" class="engine-readout">STOP</strong>
+          </div>
+          <label class="module-field range-field">
+            <span>Marker Level <strong id="markerLevelValue">0.0%</strong></span>
+            <input id="markerLevelRange" type="range" min="0" max="5" step="0.1">
+          </label>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Meters</div>
+          <div class="meter-row">
+            <span>Capture</span>
+            <div class="meter-track"><div id="vuCapture" class="meter-fill"></div></div>
+            <strong id="vuCapturePct">0</strong>
+          </div>
+          <div class="meter-row">
+            <span>Room Mic</span>
+            <div class="meter-track alt"><div id="vuRoom" class="meter-fill alt"></div></div>
+            <strong id="vuRoomPct">0</strong>
+          </div>
+        </section>
+
+        <section class="panel-module status-grid">
+          <div class="status-card"><span>Engine</span><strong id="snapEngine">Offline</strong></div>
+          <div class="status-card"><span>Sync</span><strong id="snapAutoSync">Off</strong></div>
+          <div class="status-card"><span>Master</span><strong id="snapMaster">--</strong></div>
+          <div class="status-card"><span>Locked</span><strong id="snapLocked">0</strong></div>
+        </section>
+
+        <section id="lastErrorBanner" class="panel-module error-banner hidden">
+          <div class="tape-label">Error</div>
+          <p id="lastErrorText"></p>
+        </section>
+
+        <section class="panel-module">
+          <div class="tape-label">Calibration Watch</div>
+          <div class="calibration-stat"><span>Status</span><strong id="calTitle">Ready</strong></div>
+          <div class="calibration-stat"><span>Mic Health</span><strong id="calMicHealth">Idle</strong></div>
+          <p id="calGuidance" class="cal-hint">Start calibration to watch progress and attempts.</p>
+          <div id="calAttemptsList" class="cal-attempts"></div>
+        </section>
+      </aside>
+
+      <button
+        id="leftResizeHandle"
+        class="layout-handle layout-handle-left"
+        type="button"
+        aria-label="Resize side panels"
+        title="Drag to resize side panels"></button>
+
+      <main class="center-panel">
+        <div class="center-toolbar">
+          <div>
+            <div class="tape-label">Output Strips</div>
+            <p class="toolbar-copy">Live per-route delay, volume, sync, and status in a tactile rack layout.</p>
+          </div>
+          <button id="addOutputBtn" class="console-btn">Add Output</button>
+        </div>
+        <div id="channelStrips" class="channel-strips"></div>
+      </main>
+
+      <button
+        id="rightResizeHandle"
+        class="layout-handle layout-handle-right"
+        type="button"
+        aria-label="Resize side panels"
+        title="Drag to resize side panels"></button>
+
+      <aside class="side-panel side-panel-right">
+        <section class="panel-module scope-module">
+          <div class="tape-label">Room Scope</div>
+          <div class="room-scope">
+            <div class="scope-grid"></div>
+            <div class="scope-ring ring-a"></div>
+            <div class="scope-ring ring-b"></div>
+            <div class="scope-ring ring-c"></div>
+            <div class="scope-mic">MIC</div>
+            <div id="roomScopeNodes" class="scope-nodes"></div>
+          </div>
+        </section>
+
+        <section class="panel-module">
+          <div id="selectedChannelTape" class="tape-label">Selected Route</div>
+          <div class="selected-head">
+            <strong id="selectedChannelStatus" class="selected-status">Idle</strong>
+            <h2 id="selectedChannelName">No route selected</h2>
+            <p id="selectedChannelDevice">Choose an output strip.</p>
+          </div>
+
+          <label class="module-field">
+            <span>Playback Device</span>
+            <select id="selectedDeviceSelect"></select>
+          </label>
+
+          <div class="selected-metrics">
+            <div class="metric-box">
+              <span>Latency</span>
+              <strong id="selectedLatencyValue">0 ms</strong>
+              <div class="meter-track mini"><div id="selectedLatencyMeter" class="meter-fill"></div></div>
+            </div>
+            <div class="metric-box">
+              <span>Buffer</span>
+              <strong id="selectedBufferValue">0 ms</strong>
+              <div class="meter-track mini"><div id="selectedBufferMeter" class="meter-fill"></div></div>
+            </div>
+            <div class="metric-box">
+              <span>Confidence</span>
+              <strong id="selectedConfidenceValue">0%</strong>
+              <div class="meter-track mini"><div id="selectedConfidenceMeter" class="meter-fill"></div></div>
+            </div>
+            <div class="metric-box">
+              <span>Rate</span>
+              <strong id="selectedRateValue">1.0000x</strong>
+              <div class="meter-track mini"><div id="selectedRateMeter" class="meter-fill alt"></div></div>
+            </div>
+          </div>
+
+          <div class="selected-live-controls">
+            <label class="module-field range-field">
+              <span>Route Volume <strong id="selectedVolumeValue">0%</strong></span>
+              <input id="selectedVolumeRange" type="range" min="0" max="100" step="1">
+            </label>
+            <div class="selected-delay-block">
+              <div class="selected-delay-head">
+                <span class="field-label">Delay</span>
+                <strong id="selectedDelayValue">0 ms</strong>
+              </div>
+              <div class="selected-delay-row">
+                <button id="selectedDelayMinusBtn" class="delay-step">-</button>
+                <input id="selectedDelayNumber" class="route-delay-input" type="number" min="0" max="2000" step="1" value="0">
+                <button id="selectedDelayPlusBtn" class="delay-step">+</button>
+              </div>
+              <input id="selectedDelayRange" class="route-slider" type="range" min="0" max="2000" step="1" value="0">
+              <div class="control-foot" id="selectedDelayFoot">Effective 0 ms</div>
+            </div>
+          </div>
+
+          <div class="selected-actions">
+            <button id="selectedMuteBtn" class="console-btn">Mute</button>
+            <button id="selectedSoloBtn" class="console-btn">Solo</button>
+            <button id="selectedPingBtn" class="console-btn">Ping</button>
+            <button id="selectedCopyBtn" class="console-btn">Copy</button>
+            <button id="selectedPasteBtn" class="console-btn">Paste</button>
+            <button id="selectedMasterBtn" class="console-btn">Set Master</button>
+            <button id="selectedRemoveBtn" class="console-btn selected-remove">Remove</button>
+          </div>
+        </section>
+
+        <section class="panel-module status-grid session-grid">
+          <div class="status-card"><span>Session</span><strong id="sessionStatus">Ready</strong></div>
+          <div class="status-card"><span>Capture</span><strong id="captureStatus">Idle</strong></div>
+          <div class="status-card"><span>Calibration</span><strong id="calibrationStatus">Idle</strong></div>
+          <div class="status-card">
+            <span>Config</span>
+            <button id="openConfigFolderBtn" class="console-btn session-action-btn" type="button">Open Folder</button>
+          </div>
+        </section>
+      </aside>
+
+      <div class="wood-rail"></div>
+    </div>
+
+    <footer class="log-panel">
+      <div class="log-head">
+        <div class="tape-label">Event Log</div>
+        <div class="log-tools">
+          <span id="logCountLabel" class="log-count">0</span>
+          <button id="copyLogsBtn" class="console-btn">Copy Logs</button>
+        </div>
+      </div>
+      <pre id="logOutput" class="log-output">No log entries yet.</pre>
+    </footer>
+  </div>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

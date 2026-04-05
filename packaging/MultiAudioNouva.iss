@@ -2,7 +2,7 @@
 #define MyAppPublisher "Quorraa"
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.5.0"
 #endif
 
 #ifndef SourceDir

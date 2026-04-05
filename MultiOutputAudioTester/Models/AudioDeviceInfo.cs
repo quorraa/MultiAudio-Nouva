@@ -6,11 +6,17 @@ public sealed class AudioDeviceInfo
 
     public string Name { get; init; } = string.Empty;
 
+    public string? Alias { get; init; }
+
+    public string IconType { get; init; } = "auto";
+
     public string State { get; init; } = string.Empty;
 
     public bool IsActive { get; init; }
 
-    public string DisplayName => $"{Name} [{State}]";
+    public string EffectiveName => string.IsNullOrWhiteSpace(Alias) ? Name : Alias;
+
+    public string DisplayName => $"{EffectiveName} [{State}]";
 
     public override string ToString()
     {

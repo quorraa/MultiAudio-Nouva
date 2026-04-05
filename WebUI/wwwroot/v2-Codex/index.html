@@ -52,9 +52,19 @@
         <button class="theme-dot" data-theme="blueprint" title="Blueprint — Engineering schematic" aria-label="Blueprint theme"><span style="background:#2970ff"></span></button>
         <button class="theme-dot" data-theme="hologram" title="Hologram — Prismatic light" aria-label="Hologram theme"><span style="background:conic-gradient(#f06,#f90,#ff0,#0c6,#09f,#c0f,#f06)"></span></button>
       </div>
-      <div class="transport-links">
-        <a href="../v2/" class="v1-link" title="Switch to v2">v2</a>
-        <a href="../" class="v1-link" title="Switch to v1">v1</a>
+      <div class="route-switch compact-route-switch">
+        <label class="route-switch-label" for="variantRouteSelect">Workspace</label>
+        <div class="route-switch-row">
+            <select id="variantRouteSelect" class="route-switch-select">
+              <option value="/">Launch Deck</option>
+              <option value="/v1/">v1 Legacy</option>
+              <option value="/v2/">v2 Control</option>
+              <option value="/v2-Dashboard/">v2 Dashboard</option>
+              <option value="/v2-Codex/">v2-Codex</option>
+              <option value="/v2-Tactile/">v2-Tactile</option>
+            </select>
+          <button id="openVariantRouteBtn" class="copy-btn route-switch-btn">Open</button>
+        </div>
       </div>
     </div>
   </header>

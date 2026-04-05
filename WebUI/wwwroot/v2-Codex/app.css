@@ -226,21 +226,42 @@ body {
   letter-spacing: 0.04em;
 }
 
-.v1-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  color: var(--text-3);
-  font: 700 10px/1 var(--mono);
-  text-decoration: none;
-  transition: border-color 100ms;
+.route-switch {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
 }
 
-.v1-link:hover { border-color: var(--text-2); color: var(--text-2); }
+.route-switch-label {
+  font: 700 9px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.34);
+}
+
+.route-switch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.route-switch-select {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: rgba(255,255,255,0.76);
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compact-route-switch .route-switch-btn {
+  min-width: 72px;
+}
 
 /* ===== CONSOLE LAYOUT ===== */
 .console {
