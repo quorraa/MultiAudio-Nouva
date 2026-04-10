@@ -160,7 +160,7 @@ function connectEv() {
   if (!window.EventSource) { startFb(); return; }
   if (evStream) evStream.close();
   evStream = new EventSource("/api/events");
-  evStream.addEventListener("state", e => { stopFb(); try { lastStateAt = Date.now(); setState(JSON.parse(e.data)); } catch { startFb(); } });
+  evStream.addEventListener("state", e => { stopFb(); try { lastStateAt = Date.now(); setState(normalizeSsePayload(JSON.parse(e.data))); } catch { startFb(); } });
   evStream.onopen = () => { lastStateAt = Date.now(); stopFb(); };
   evStream.onerror = () => { startFb(); setTimeout(() => { if (evStream?.readyState === 2) connectEv(); }, RETRY_MS); };
 }
@@ -169,7 +169,7 @@ function connectTele() {
   if (!window.EventSource) return;
   if (teleStream) teleStream.close();
   teleStream = new EventSource("/api/telemetry");
-  teleStream.addEventListener("telemetry", e => { try { lastTeleAt = Date.now(); setTelemetry(JSON.parse(e.data)); } catch {} });
+  teleStream.addEventListener("telemetry", e => { try { lastTeleAt = Date.now(); setTelemetry(normalizeSsePayload(JSON.parse(e.data))); } catch {} });
   teleStream.onopen = () => { lastTeleAt = Date.now(); };
   teleStream.onerror = () => { setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
 }
@@ -241,7 +241,8 @@ function mergeTele(f) {
     o.appliedVolumePercent = t.appliedVolumePercent ?? o.appliedVolumePercent ?? o.volumePercent ?? 0;
     o.delayMilliseconds = t.delayMilliseconds ?? o.delayMilliseconds ?? 0;
     o.effectiveDelayMilliseconds = t.effectiveDelayMilliseconds ?? o.effectiveDelayMilliseconds ?? o.delayMilliseconds ?? 0;
-    o.syncConfidence = t.syncConfidence || 0; o.syncLockState = t.syncLockState || o.syncLockState;
+    o.syncConfidence = t.syncConfidence || 0;
+    o.syncLockState = (typeof t.syncLockState === 'string' && t.syncLockState) ? t.syncLockState : o.syncLockState;
     o.syncSummary = t.syncSummary || o.syncSummary; o.isMuted = !!t.isMuted; o.isSolo = !!t.isSolo;
   }
 }
@@ -430,7 +431,8 @@ function patchTele(f) {
     const lockEl = strip.querySelector(`[data-lock="${t.slotIndex}"]`);
     if (fill) setMeterPercent(fill, routeMeterPct(t.meterLevel));
     if (pctEl) pctEl.textContent = routeMeterLabel(t.meterLevel);
-    if (lockEl) lockEl.textContent = t.syncLockState || "Disabled";
+    // syncLockState from SSE is an integer enum; use authoritative string from state instead
+    if (lockEl) lockEl.textContent = findRoute(t.slotIndex)?.syncLockState || "Disabled";
 
     const status = strip.querySelector(".ch-status");
     if (status) status.textContent = `${t.statusText} · ${t.syncSummary || "Manual"}`;
@@ -742,3 +744,15 @@ function chColor(i) {
 function holoDelay(i) { return `${(((i - 1) % 8) * -0.55).toFixed(2)}s`; }
 function jsonStore(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } }
 function esc(v) { return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;"); }
+
+// SSE endpoints serialize JSON in PascalCase; REST endpoints use camelCase.
+// Normalize SSE event payloads before processing so all code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
+}

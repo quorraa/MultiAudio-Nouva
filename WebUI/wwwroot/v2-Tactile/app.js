@@ -218,7 +218,7 @@ function connectEv() {
     stopFb();
     try {
       lastStateAt = Date.now();
-      setState(JSON.parse(event.data));
+      setState(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       startFb();
     }
@@ -248,7 +248,7 @@ function connectTele() {
   teleStream.addEventListener("telemetry", (event) => {
     try {
       lastTeleAt = Date.now();
-      setTelemetry(JSON.parse(event.data));
+      setTelemetry(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       // ignore malformed telemetry frame
     }
@@ -365,6 +365,16 @@ function setState(next) {
     return;
   }
   state = next;
+  // Re-apply the last known telemetry into the fresh state snapshot so that
+  // renderStrips() and renderRack() use telemetry-consistent values (syncLockState,
+  // captureLevel, per-route metrics etc.) without waiting for the next telemetry tick.
+  if (telemetryState) mergeTele(telemetryState);
+  // isRunning / isCalibrating must come from the state snapshot — it is the
+  // authoritative source for engine lifecycle. mergeTele() overwrites them with the
+  // telemetry frame values which can be stale (e.g. from before the engine started),
+  // causing the engine pill to show OFFLINE even when streaming is active.
+  state.isRunning = next.isRunning;
+  state.isCalibrating = next.isCalibrating;
   reconcileDrafts();
   ensureSelectedRoute();
   render();
@@ -405,7 +415,7 @@ function mergeTele(frame) {
     output.delayMilliseconds = teleOut.delayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.effectiveDelayMilliseconds = teleOut.effectiveDelayMilliseconds ?? output.effectiveDelayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.syncConfidence = teleOut.syncConfidence || 0;
-    output.syncLockState = teleOut.syncLockState || output.syncLockState;
+    output.syncLockState = (typeof teleOut.syncLockState === 'string' && teleOut.syncLockState) ? teleOut.syncLockState : output.syncLockState;
     output.syncSummary = teleOut.syncSummary || output.syncSummary;
     output.isMuted = !!teleOut.isMuted;
     output.isSolo = !!teleOut.isSolo;
@@ -695,7 +705,11 @@ function patchTele(frame) {
     const delayKnob = strip.querySelector('[data-knob-field="delay"]');
     const volumeKnobReadout = strip.querySelector('[data-knob-readout="volume"]');
     const delayKnobReadout = strip.querySelector('[data-knob-readout="delay"]');
-    const liveVolume = Math.round(teleOut.volumePercent ?? teleOut.appliedVolumePercent ?? 0);
+    // volumePercent is NOT in OutputTelemetryState (only appliedVolumePercent is).
+    // Using route.volumePercent (configured value from state) keeps patchTele and
+    // renderStrips() in agreement, eliminating fader/knob/LED flicker.
+    const route = findRoute(teleOut.slotIndex);
+    const liveVolume = Math.round(route?.volumePercent ?? teleOut.appliedVolumePercent ?? 0);
     const liveDelay = Math.round(teleOut.delayMilliseconds || 0);
 
     if (meter) {
@@ -747,8 +761,14 @@ function patchTele(frame) {
       delayKnobReadout.textContent = `${liveDelay} ms`;
     }
     if (masterTag) {
-      masterTag.textContent = teleOut.isTimingMaster ? "Master" : teleOut.syncLockState || "Manual";
-      masterTag.classList.toggle("is-active", !!teleOut.isTimingMaster);
+      // isTimingMaster is NOT in OutputTelemetryState — always read from state.
+      // syncLockState IS in telemetry but as an integer enum (e.g. 0 for Disabled)
+      // while the REST state returns it as a string ("Disabled"). The integer is falsy
+      // so teleOut.syncLockState || "Manual" would incorrectly show "Manual" every tick.
+      // Use route (state-sourced) for both fields to stay consistent with renderStrip().
+      const isMaster = !!route?.isTimingMaster;
+      masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
+      masterTag.classList.toggle("is-active", isMaster);
     }
   }
 
@@ -1758,6 +1778,18 @@ function titleCase(value) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+// SSE endpoints serialize JSON with PascalCase keys while REST endpoints use camelCase.
+// This normalizes SSE event payloads so all downstream code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
 }
 
 function escapeHtml(value) {

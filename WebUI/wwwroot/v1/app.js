@@ -226,7 +226,7 @@ function connectEventStream() {
     stopFallbackPolling();
     try {
       lastStateSignalAt = Date.now();
-      setState(JSON.parse(event.data));
+      setState(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       startFallbackPolling();
     }
@@ -258,7 +258,7 @@ function connectTelemetryStream() {
   telemetryStream.addEventListener("telemetry", (event) => {
     try {
       lastTelemetrySignalAt = Date.now();
-      setTelemetry(JSON.parse(event.data));
+      setTelemetry(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       // Let the reconnect path handle malformed frames.
     }
@@ -940,7 +940,7 @@ function mergeTelemetryIntoState(frame) {
     output.delayMilliseconds = Number(telemetryOutput.delayMilliseconds ?? output.delayMilliseconds ?? 0);
     output.effectiveDelayMilliseconds = Number(telemetryOutput.effectiveDelayMilliseconds ?? output.effectiveDelayMilliseconds ?? output.delayMilliseconds ?? 0);
     output.syncConfidence = Number(telemetryOutput.syncConfidence || 0);
-    output.syncLockState = telemetryOutput.syncLockState || output.syncLockState;
+    output.syncLockState = (typeof telemetryOutput.syncLockState === 'string' && telemetryOutput.syncLockState) ? telemetryOutput.syncLockState : output.syncLockState;
     output.syncSummary = telemetryOutput.syncSummary || output.syncSummary;
     output.isMuted = !!telemetryOutput.isMuted;
     output.isSolo = !!telemetryOutput.isSolo;
@@ -1775,4 +1775,16 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+// SSE endpoints serialize JSON in PascalCase; REST endpoints use camelCase.
+// Normalize SSE event payloads before processing so all code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
 }

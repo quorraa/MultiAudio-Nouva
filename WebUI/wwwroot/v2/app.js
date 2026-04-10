@@ -26,6 +26,8 @@ let holdState = null;
 let calibInFlight = false;
 let lastStateAt = 0;
 let lastTeleAt = 0;
+let isDragging = false;        // true while pointer is held down on a range input
+let pendingRenderStrips = false; // true when renderStrips() was deferred mid-drag
 const animatedMeters = new Map();
 let meterAnimationFrame = 0;
 
@@ -81,7 +83,11 @@ async function boot() {
 function applyTheme() {
   document.body.className = currentTheme === "midnight" ? "" : `theme-${currentTheme}`;
   localStorage.setItem("v2.theme", currentTheme);
-  document.querySelectorAll(".theme-dot").forEach(b => b.classList.toggle("active", b.dataset.theme === currentTheme));
+  document.querySelectorAll(".theme-dot").forEach(b => {
+    const active = b.dataset.theme === currentTheme;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", active ? "true" : "false");
+  });
   if (state) renderStrips();
 }
 
@@ -139,10 +145,15 @@ function bindEvents() {
   el.channelStrips.addEventListener("change", handleChInput);
   el.channelStrips.addEventListener("click", handleChClick);
   el.channelStrips.addEventListener("pointerdown", handleChPointerDown);
+  // Track when the user starts dragging a range input so we can defer DOM re-renders
+  el.channelStrips.addEventListener("pointerdown", e => {
+    if (e.target.matches('input[type="range"]')) isDragging = true;
+  });
   el.channelStrips.addEventListener("wheel", handleChWheel, { passive: false });
   el.channelStrips.addEventListener("keydown", handleChKey);
-  document.addEventListener("pointerup", stopHold);
-  document.addEventListener("pointercancel", stopHold);
+  // Combine hold + drag-end cleanup into one handler per pointer event
+  document.addEventListener("pointerup", onGlobalPointerUp);
+  document.addEventListener("pointercancel", onGlobalPointerUp);
 }
 
 // ===== SSE =====
@@ -150,7 +161,7 @@ function connectEv() {
   if (!window.EventSource) { startFb(); return; }
   if (evStream) evStream.close();
   evStream = new EventSource("/api/events");
-  evStream.addEventListener("state", e => { stopFb(); try { lastStateAt = Date.now(); setState(JSON.parse(e.data)); } catch { startFb(); } });
+  evStream.addEventListener("state", e => { stopFb(); try { lastStateAt = Date.now(); setState(normalizeSsePayload(JSON.parse(e.data))); } catch { startFb(); } });
   evStream.onopen = () => { lastStateAt = Date.now(); stopFb(); };
   evStream.onerror = () => { startFb(); setTimeout(() => { if (evStream?.readyState === 2) connectEv(); }, RETRY_MS); };
 }
@@ -159,7 +170,7 @@ function connectTele() {
   if (!window.EventSource) return;
   if (teleStream) teleStream.close();
   teleStream = new EventSource("/api/telemetry");
-  teleStream.addEventListener("telemetry", e => { try { lastTeleAt = Date.now(); setTelemetry(JSON.parse(e.data)); } catch {} });
+  teleStream.addEventListener("telemetry", e => { try { lastTeleAt = Date.now(); setTelemetry(normalizeSsePayload(JSON.parse(e.data))); } catch {} });
   teleStream.onopen = () => { lastTeleAt = Date.now(); };
   teleStream.onerror = () => { setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
 }
@@ -207,6 +218,14 @@ function setState(next) {
   if (!next) return;
   if (state && (next.stateRevision || 0) < (state.stateRevision || 0)) return;
   state = next;
+  // Re-apply the last known telemetry values into the fresh state snapshot so that
+  // captureLevel, syncLockState, per-route metrics etc. stay current between state events.
+  if (telemetryState) mergeTele(telemetryState);
+  // isRunning / isCalibrating must come from the state snapshot — the authoritative source
+  // for engine lifecycle. mergeTele() overwrites them with potentially stale telemetry
+  // values, causing the engine pill to show OFFLINE even when streaming is active.
+  state.isRunning = next.isRunning;
+  state.isCalibrating = next.isCalibrating;
   reconcileDrafts();
   render();
 }
@@ -233,7 +252,11 @@ function mergeTele(f) {
     o.appliedVolumePercent = t.appliedVolumePercent ?? o.appliedVolumePercent ?? o.volumePercent ?? 0;
     o.delayMilliseconds = t.delayMilliseconds ?? o.delayMilliseconds ?? 0;
     o.effectiveDelayMilliseconds = t.effectiveDelayMilliseconds ?? o.effectiveDelayMilliseconds ?? o.delayMilliseconds ?? 0;
-    o.syncConfidence = t.syncConfidence || 0; o.syncLockState = t.syncLockState || o.syncLockState;
+    o.syncConfidence = t.syncConfidence || 0;
+    // syncLockState is an enum serialized as an integer by the SSE endpoint.
+    // Only update from telemetry when it's a non-empty string (REST poll); integer values
+    // from SSE would corrupt state with a number where a display string is expected.
+    o.syncLockState = (typeof t.syncLockState === 'string' && t.syncLockState) ? t.syncLockState : o.syncLockState;
     o.syncSummary = t.syncSummary || o.syncSummary; o.isMuted = !!t.isMuted; o.isSolo = !!t.isSolo;
   }
 }
@@ -266,7 +289,12 @@ function renderRack() {
   setR(el.masterVolRange, state.masterVolumePercent); setR(el.markerLevelRange, state.markerLevelPercent);
   el.masterVolRange.disabled = state.isCalibrating; el.markerLevelRange.disabled = state.isCalibrating;
   syncLabels();
-  document.querySelectorAll("[data-sync-mode]").forEach(b => { b.classList.toggle("active", b.dataset.syncMode === state.autoSyncMode); b.disabled = state.isCalibrating; });
+  document.querySelectorAll("[data-sync-mode]").forEach(b => {
+    const active = b.dataset.syncMode === state.autoSyncMode;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", active ? "true" : "false");
+    b.disabled = state.isCalibrating;
+  });
 
   vu(el.vuCapture, state.captureLevel); vu(el.vuRoom, state.roomMicLevel);
   el.vuCapturePct.textContent = Math.round((state.captureLevel || 0) * 100);
@@ -283,6 +311,10 @@ function renderRack() {
 }
 
 function renderStrips() {
+  // Do NOT destroy the DOM while the user is dragging a range slider —
+  // replacing innerHTML would kill the live element and prematurely end the drag.
+  if (isDragging) { pendingRenderStrips = true; return; }
+  pendingRenderStrips = false;
   el.channelStrips.innerHTML = (state.outputs || []).map(o => renderStrip(mergeDraft(o))).join("");
 }
 
@@ -417,7 +449,11 @@ function handleChClick(e) {
   const slot = +strip.dataset.slot; const action = btn.dataset.action;
   markInteract();
   if (action === "step-delay") { if (e.detail === 0) nudge(strip, +btn.dataset.step); return; }
-  if (action === "remove") { clearRT(slot); runAction(slot, action, () => api(`/api/outputs/${slot}`, { method: "DELETE" })); return; }
+  if (action === "remove") {
+    const name = findRoute(slot)?.selectedDeviceName || `CH ${slot}`;
+    if (!confirm(`Remove CH ${slot} — ${name}?\n\nThis cannot be undone.`)) return;
+    clearRT(slot); runAction(slot, action, () => api(`/api/outputs/${slot}`, { method: "DELETE" })); return;
+  }
   if (action === "mute" || action === "solo") { clearRT(slot); const rb = optToggle(slot, action); runAction(slot, action, () => api(`/api/outputs/${slot}/${action}`, { method: "POST" }), rb); return; }
   if (action === "ping") { clearRT(slot); runAction(slot, action, () => api(`/api/outputs/${slot}/ping`, { method: "POST" })); return; }
   if (action === "make-master") { clearRT(slot); runAction(slot, action, () => api(`/api/outputs/${slot}`, { method: "PUT", body: chPayload(strip, true) })); return; }
@@ -491,6 +527,15 @@ function clearRT(s) { const t = routeTimers.get(s); if (t) { clearTimeout(t); ro
 function startHold(strip, step) { stopHold(); if (!step) return; markInteract(); nudge(strip, step); holdState = { id: setInterval(() => nudge(strip, step), HOLD_MS) }; }
 function stopHold() { if (!holdState) return; clearInterval(holdState.id); holdState = null; }
 
+// Called on every global pointerup/pointercancel — clears hold AND range drag state
+function onGlobalPointerUp() {
+  stopHold();
+  if (!isDragging) return;
+  isDragging = false;
+  // Flush any renderStrips() call that was deferred to protect the live drag element
+  if (pendingRenderStrips && state) { pendingRenderStrips = false; renderStrips(); }
+}
+
 function nudge(strip, d) {
   const dr = strip.querySelector('[data-field="delay"]'), dn = strip.querySelector('[data-field="delay-number"]');
   if (!dr || !dn) return;
@@ -556,7 +601,13 @@ function renderSel(el, opts, sel, dis, ph) {
 function setR(el, v) { if (!dirty(el)) el.value = v; }
 function dirty(el) { return document.activeElement === el || settingsTimer !== null; }
 function syncLabels() { el.masterVolValue.textContent = Math.round(+el.masterVolRange.value); el.markerLevelValue.textContent = (+el.markerLevelRange.value).toFixed(1) + "%"; }
-function setSyncMode(m) { document.querySelectorAll("[data-sync-mode]").forEach(b => b.classList.toggle("active", b.dataset.syncMode === m)); }
+function setSyncMode(m) {
+  document.querySelectorAll("[data-sync-mode]").forEach(b => {
+    const active = b.dataset.syncMode === m;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
 
 function syncChLabel(strip, changed) {
   const vol = strip.querySelector('[data-field="volume"]'), delay = strip.querySelector('[data-field="delay"]'), dn = strip.querySelector('[data-field="delay-number"]');
@@ -610,8 +661,20 @@ function markInteract() { interactionPauseUntil = Date.now() + INTERACT_PAUSE_MS
 async function copyLogs() { try { await navigator.clipboard.writeText(el.logOutput.textContent || ""); toast("Copied.", "success"); } catch { toast("Failed."); } }
 
 function toast(msg, tone) {
-  const t = document.createElement("div"); t.className = `toast ${tone||""}`.trim(); t.textContent = msg;
-  el.toastStack.appendChild(t); setTimeout(() => t.remove(), 4800);
+  const t = document.createElement("div");
+  t.className = `toast ${tone||""}`.trim();
+  const span = document.createElement("span");
+  span.className = "toast-msg";
+  span.textContent = msg;
+  const close = document.createElement("button");
+  close.className = "toast-close";
+  close.setAttribute("aria-label", "Dismiss notification");
+  close.textContent = "×";
+  close.onclick = () => t.remove();
+  t.append(span, close);
+  el.toastStack.appendChild(t);
+  const timer = setTimeout(() => t.remove(), 4800);
+  close.addEventListener("click", () => clearTimeout(timer), { once: true });
 }
 
 function calModel(src) {
@@ -651,3 +714,15 @@ function chColor(i) {
 function holoDelay(i) { return `${(((i - 1) % 8) * -0.55).toFixed(2)}s`; }
 function jsonStore(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } }
 function esc(v) { return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;"); }
+
+// SSE endpoints serialize JSON in PascalCase; REST endpoints use camelCase.
+// Normalize SSE event payloads before processing so all code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
+}

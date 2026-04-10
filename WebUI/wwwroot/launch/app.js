@@ -177,7 +177,7 @@ function connectEvents() {
   eventStream.addEventListener("state", (event) => {
     try {
       lastStateAt = Date.now();
-      setState(JSON.parse(event.data));
+      setState(normalizeSsePayload(JSON.parse(event.data)));
       stopFallbackPolling();
     } catch {
       startFallbackPolling();
@@ -210,7 +210,7 @@ function connectTelemetry() {
   teleStream.addEventListener("telemetry", (event) => {
     try {
       lastTeleAt = Date.now();
-      setTelemetry(JSON.parse(event.data));
+      setTelemetry(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       // Next reconnect can recover.
     }
@@ -442,7 +442,7 @@ function mergeTelemetryIntoState(nextTelemetry) {
     output.delayMilliseconds = teleOut.delayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.effectiveDelayMilliseconds = teleOut.effectiveDelayMilliseconds ?? output.effectiveDelayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.syncConfidence = teleOut.syncConfidence ?? output.syncConfidence ?? 0;
-    output.syncLockState = teleOut.syncLockState || output.syncLockState;
+    output.syncLockState = (typeof teleOut.syncLockState === 'string' && teleOut.syncLockState) ? teleOut.syncLockState : output.syncLockState;
     output.playbackRateRatio = teleOut.playbackRateRatio ?? output.playbackRateRatio ?? 1;
     output.isMuted = !!teleOut.isMuted;
     output.isSolo = !!teleOut.isSolo;
@@ -1079,4 +1079,16 @@ function stepMeters() {
   if (pendingFrame || animatedMeters.size) {
     meterAnimationFrame = requestAnimationFrame(stepMeters);
   }
+}
+
+// SSE endpoints serialize JSON in PascalCase; REST endpoints use camelCase.
+// Normalize SSE event payloads before processing so all code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
 }

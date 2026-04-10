@@ -14,7 +14,7 @@
   --border-lit: #3a3a4e;
   --text:       #e8e8f0;
   --text-2:     #9898ab;
-  --text-3:     #5c5c72;
+  --text-3:     #7878a0; /* raised from #5c5c72 → ~5:1 contrast on --bg */
   --accent:     #00e5a0;
   --accent-dim: rgba(0,229,160,0.15);
   --accent-glow:rgba(0,229,160,0.4);
@@ -49,6 +49,12 @@ body {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 
 /* ===== TRANSPORT BAR ===== */
 .transport {
@@ -258,6 +264,8 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+.route-switch-select option { background-color: #0a0a0f; color: #ffffffc2; }
 
 .compact-route-switch .route-switch-btn {
   min-width: 72px;

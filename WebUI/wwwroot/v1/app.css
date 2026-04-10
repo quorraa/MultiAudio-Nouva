@@ -224,6 +224,8 @@ body {
   box-shadow: 0 0 0 3px rgba(27, 197, 255, 0.12);
 }
 
+.route-switch-select option { background-color: #040a13; color: #e8f4ff; }
+
 .route-switch-btn {
   min-width: 108px;
 }

@@ -243,7 +243,7 @@ function connectEv() {
     stopFb();
     try {
       lastStateAt = Date.now();
-      setState(JSON.parse(event.data));
+      setState(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       startFb();
     }
@@ -273,7 +273,7 @@ function connectTele() {
   teleStream.addEventListener("telemetry", (event) => {
     try {
       lastTeleAt = Date.now();
-      setTelemetry(JSON.parse(event.data));
+      setTelemetry(normalizeSsePayload(JSON.parse(event.data)));
     } catch {
       // ignore malformed telemetry frame
     }
@@ -430,7 +430,7 @@ function mergeTele(frame) {
     output.delayMilliseconds = teleOut.delayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.effectiveDelayMilliseconds = teleOut.effectiveDelayMilliseconds ?? output.effectiveDelayMilliseconds ?? output.delayMilliseconds ?? 0;
     output.syncConfidence = teleOut.syncConfidence || 0;
-    output.syncLockState = teleOut.syncLockState || output.syncLockState;
+    output.syncLockState = (typeof teleOut.syncLockState === 'string' && teleOut.syncLockState) ? teleOut.syncLockState : output.syncLockState;
     output.syncSummary = teleOut.syncSummary || output.syncSummary;
     output.isMuted = !!teleOut.isMuted;
     output.isSolo = !!teleOut.isSolo;
@@ -783,8 +783,11 @@ function patchTele(frame) {
     const delayKnob = strip.querySelector('[data-knob-field="delay"]');
     const volumeKnobReadout = strip.querySelector('[data-knob-readout="volume"]');
     const delayKnobReadout = strip.querySelector('[data-knob-readout="delay"]');
-    const liveVolume = Math.round(teleOut.volumePercent ?? teleOut.appliedVolumePercent ?? 0);
+    const liveVolume = Math.round(teleOut.appliedVolumePercent ?? teleOut.volumePercent ?? 0);
     const liveDelay = Math.round(teleOut.delayMilliseconds || 0);
+    // isTimingMaster and syncLockState are not reliable from SSE (integer enums, missing fields).
+    // Read from the authoritative state object so patchTele and renderStrips() stay in sync.
+    const route = findRoute(teleOut.slotIndex);
 
     if (meter) {
       setMeterPercent(meter, routeMeterPct(teleOut.meterLevel));
@@ -835,8 +838,9 @@ function patchTele(frame) {
       delayKnobReadout.textContent = `${liveDelay} ms`;
     }
     if (masterTag) {
-      masterTag.textContent = teleOut.isTimingMaster ? "Master" : teleOut.syncLockState || "Manual";
-      masterTag.classList.toggle("is-active", !!teleOut.isTimingMaster);
+      const isMaster = !!route?.isTimingMaster;
+      masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
+      masterTag.classList.toggle("is-active", isMaster);
     }
   }
 
@@ -2086,4 +2090,16 @@ function readBool(key, fallback) {
     return fallback;
   }
   return value === "1" || value === "true";
+}
+
+// SSE endpoints serialize JSON in PascalCase; REST endpoints use camelCase.
+// Normalize SSE event payloads before processing so all code reads consistent camelCase.
+function normalizeSsePayload(data) {
+  if (Array.isArray(data)) return data.map(normalizeSsePayload);
+  if (data && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), normalizeSsePayload(v)])
+    );
+  }
+  return data;
 }

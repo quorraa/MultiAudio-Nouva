@@ -235,6 +235,8 @@ body {
   text-transform: uppercase;
 }
 
+.route-switch-select option { background-color: #0a0e16; color: #ffffffc2; }
+
 .compact-route-switch .route-switch-btn {
   min-width: 72px;
 }

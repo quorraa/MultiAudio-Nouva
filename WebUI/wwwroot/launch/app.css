@@ -308,6 +308,14 @@ input {
   color: var(--text);
 }
 
+/* Native dropdown option elements inherit transparent bg, which causes near-white
+   text to render on the OS's light dropdown background — nearly invisible.
+   Force a dark background and matching text so contrast is always readable. */
+.route-switch-select option {
+  background-color: #0d1020;
+  color: #f7fbff;
+}
+
 .route-switch-btn {
   min-width: 92px;
 }

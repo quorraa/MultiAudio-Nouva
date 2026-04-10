@@ -8,48 +8,47 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-
   <!-- ===== TOP TRANSPORT BAR — like a DAW transport ===== -->
   <header class="transport">
     <div class="transport-left">
       <div class="logo">
-        <span class="logo-glyph">M</span>
+        <span class="logo-glyph" aria-hidden="true">M</span>
         <span class="logo-text">MultiAudio Nouva</span>
       </div>
-      <span id="enginePill" class="engine-pill offline">OFFLINE</span>
+      <span id="enginePill" class="engine-pill offline" role="status" aria-live="polite" aria-atomic="true">OFFLINE</span>
     </div>
 
     <div class="transport-center">
-      <button id="startBtn" class="transport-btn transport-play" title="Start">
-        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+      <button id="startBtn" class="transport-btn transport-play" title="Start" aria-label="Start streaming">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
       </button>
-      <button id="stopBtn" class="transport-btn transport-stop" title="Stop">
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      <button id="stopBtn" class="transport-btn transport-stop" title="Stop" aria-label="Stop streaming">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
       </button>
-      <button id="calibrateBtn" class="transport-btn" title="Calibrate">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      <button id="calibrateBtn" class="transport-btn" title="Calibrate" aria-label="Run calibration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
       </button>
-      <button id="refreshBtn" class="transport-btn" title="Refresh Devices">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+      <button id="refreshBtn" class="transport-btn" title="Refresh Devices" aria-label="Refresh audio devices">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
       </button>
     </div>
 
     <div class="transport-right">
       <div class="master-vol-block">
-        <label class="master-label">MASTER</label>
-        <input id="masterVolRange" type="range" min="0" max="100" step="1" class="master-fader">
-        <span id="masterVolValue" class="master-readout">100</span>
+        <label class="master-label" for="masterVolRange">MASTER</label>
+        <input id="masterVolRange" type="range" min="0" max="100" step="1" class="master-fader" aria-valuetext="100%">
+        <span id="masterVolValue" class="master-readout" aria-hidden="true">100</span>
       </div>
       <div class="zoom-control">
         <button id="zoomOut" class="zoom-btn" title="Zoom out">-</button>
         <span id="zoomLevel" class="zoom-readout">100</span>
         <button id="zoomIn" class="zoom-btn" title="Zoom in">+</button>
       </div>
-      <div class="theme-picker" id="themePicker">
-        <button class="theme-dot" data-theme="midnight" title="Midnight — Dark mixer console"><span style="background:#00e5a0"></span></button>
-        <button class="theme-dot" data-theme="ember" title="Ember — Industrial forge"><span style="background:#f97316"></span></button>
-        <button class="theme-dot" data-theme="blueprint" title="Blueprint — Engineering schematic"><span style="background:#2970ff"></span></button>
-        <button class="theme-dot" data-theme="hologram" title="Hologram — Prismatic light"><span style="background:conic-gradient(#f06,#f90,#ff0,#0c6,#09f,#c0f,#f06)"></span></button>
+      <div class="theme-picker" id="themePicker" role="group" aria-label="Color theme">
+        <button class="theme-dot" data-theme="midnight" title="Midnight — Dark mixer console" aria-label="Midnight theme" aria-pressed="true"><span style="background:#00e5a0" aria-hidden="true"></span></button>
+        <button class="theme-dot" data-theme="ember" title="Ember — Industrial forge" aria-label="Ember theme" aria-pressed="false"><span style="background:#f97316" aria-hidden="true"></span></button>
+        <button class="theme-dot" data-theme="blueprint" title="Blueprint — Engineering schematic" aria-label="Blueprint theme" aria-pressed="false"><span style="background:#2970ff" aria-hidden="true"></span></button>
+        <button class="theme-dot" data-theme="hologram" title="Hologram — Prismatic light" aria-label="Hologram theme" aria-pressed="false"><span style="background:conic-gradient(#f06,#f90,#ff0,#0c6,#09f,#c0f,#f06)" aria-hidden="true"></span></button>
       </div>
       <div class="route-switch compact-route-switch">
         <label class="route-switch-label" for="variantRouteSelect">Workspace</label>
@@ -74,11 +73,11 @@
     <!-- ===== LEFT: CONFIG RACK ===== -->
     <aside class="rack">
       <div class="rack-module">
-        <div class="rack-label">INPUT SOURCE</div>
+        <label class="rack-label" for="inputSelect">INPUT SOURCE</label>
         <select id="inputSelect" class="rack-select"></select>
       </div>
       <div class="rack-module">
-        <div class="rack-label">CALIBRATION MIC</div>
+        <label class="rack-label" for="calibrationSelect">CALIBRATION MIC</label>
         <select id="calibrationSelect" class="rack-select"></select>
       </div>
       <div class="rack-module rack-toggle-row">
@@ -88,16 +87,16 @@
         </label>
       </div>
       <div class="rack-module">
-        <div class="rack-label">AUTO-SYNC</div>
-        <div class="sync-switch">
-          <button class="sync-opt" data-sync-mode="Off">OFF</button>
-          <button class="sync-opt" data-sync-mode="MonitorOnly">MON</button>
-          <button class="sync-opt" data-sync-mode="Control">CTRL</button>
+        <div class="rack-label" id="syncModeLabel">AUTO-SYNC</div>
+        <div class="sync-switch" role="group" aria-labelledby="syncModeLabel">
+          <button class="sync-opt" data-sync-mode="Off" aria-pressed="true">OFF</button>
+          <button class="sync-opt" data-sync-mode="MonitorOnly" aria-pressed="false">MON</button>
+          <button class="sync-opt" data-sync-mode="Control" aria-pressed="false">CTRL</button>
         </div>
       </div>
       <div class="rack-module">
         <div class="rack-label">MARKER LVL <strong id="markerLevelValue">1.6%</strong></div>
-        <input id="markerLevelRange" type="range" min="0" max="5" step="0.1" class="rack-slider">
+        <input id="markerLevelRange" type="range" min="0" max="5" step="0.1" class="rack-slider" aria-label="Marker level">
       </div>
 
       <div class="rack-module rack-meters">
@@ -125,8 +124,8 @@
         <span id="lastErrorText"></span>
       </div>
 
-      <!-- Calibration watch (collapsed by default) -->
-      <details class="rack-module rack-cal-details">
+      <!-- Calibration watch -->
+      <details class="rack-module rack-cal-details" open>
         <summary class="rack-label rack-summary">CALIBRATION</summary>
         <div class="rack-cal-body">
           <div class="rack-stat"><span>Status</span><strong id="calTitle">Ready</strong></div>
@@ -139,7 +138,7 @@
     </aside>
 
     <!-- ===== CENTER: CHANNEL STRIPS ===== -->
-    <main class="mixer">
+    <main class="mixer" id="mixer-main">
       <div class="mixer-toolbar">
         <h2 class="mixer-title">CHANNELS</h2>
         <button id="addOutputBtn" class="add-ch-btn">+ CH</button>

@@ -133,6 +133,19 @@ app.Use(async (context, next) =>
             return;
         }
     }
+    if (path.Equals("/launch-neo", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/launch-neo/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("launch-neo/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
     await next();
 });
 

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Nouva · Neo Deck</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="state-offline">
+
+  <!-- ═══════════════════════ CONTROL BAR ═══════════════════════ -->
+  <header class="ctrl-bar">
+    <div class="ctrl-brand">
+      <svg viewBox="0 0 28 28" width="24" height="24" aria-hidden="true">
+        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="var(--accent)"/>
+          <stop offset="100%" stop-color="#3b82f6"/>
+        </linearGradient></defs>
+        <rect width="28" height="28" rx="8" fill="url(#bg)"/>
+        <rect x="7"  y="15" width="3" height="9"  rx="1.5" fill="#05090f"/>
+        <rect x="12" y="9"  width="3" height="15" rx="1.5" fill="#05090f"/>
+        <rect x="17" y="12" width="3" height="12" rx="1.5" fill="#05090f"/>
+      </svg>
+      <span class="ctrl-brand-name">MultiAudio Nouva</span>
+      <span class="ctrl-brand-tag">Neo Deck</span>
+    </div>
+
+    <div class="ctrl-transport">
+      <button id="startBtn" class="ctrl-btn start-btn" title="Start streaming">▶ Start</button>
+      <button id="stopBtn"  class="ctrl-btn stop-btn"  title="Stop streaming">■ Stop</button>
+      <button id="calibBtn" class="ctrl-btn"            title="Run calibration">⌖ Calibrate</button>
+      <button id="refreshBtn" class="ctrl-btn"          title="Refresh devices">↺ Refresh</button>
+    </div>
+
+    <div class="ctrl-master">
+      <label class="ctrl-lbl" for="masterVolRange">MASTER</label>
+      <input id="masterVolRange" type="range" min="0" max="100" step="1" class="ctrl-range">
+      <span id="masterVolValue" class="ctrl-val">100</span>
+    </div>
+
+    <div class="ctrl-nav">
+      <label class="ctrl-lbl" for="routeSelect">WORKSPACE</label>
+      <div class="ctrl-nav-row">
+        <select id="routeSelect" class="ctrl-select">
+          <option value="/">Launch Deck</option>
+          <option value="/launch-neo/" selected>Neo Deck</option>
+          <option value="/v1/">v1 Legacy</option>
+          <option value="/v2/">v2 Control</option>
+          <option value="/v2-Dashboard/">Dashboard</option>
+          <option value="/v2-Codex/">Codex</option>
+          <option value="/v2-Tactile/">Tactile</option>
+        </select>
+        <button id="openRouteBtn" class="ctrl-btn">Open</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════ STATUS CONSOLE ═══════════════════════ -->
+  <!-- Visual identity of the page — changes character based on engine state -->
+  <section class="status-console" id="statusConsole">
+    <div class="console-left">
+      <div class="engine-indicator">
+        <div class="engine-orb" id="engineOrb" aria-hidden="true"></div>
+        <div class="engine-text">
+          <div id="engineMode" class="engine-mode">OFFLINE</div>
+          <div id="engineSub"  class="engine-sub">No session active</div>
+        </div>
+      </div>
+      <div class="console-action-strip">
+        <div class="console-stat"><span>Sync</span><strong id="csMaster">--</strong></div>
+        <div class="console-stat"><span>Locked</span><strong id="csLocked">0</strong></div>
+        <div class="console-stat"><span>Mode</span><strong id="csSync">Off</strong></div>
+        <div class="console-stat"><span>Routes</span><strong id="csRoutes">0</strong></div>
+      </div>
+    </div>
+
+    <div class="console-meters">
+      <div class="console-meter-block">
+        <div class="cm-label">CAPTURE</div>
+        <div class="cm-track">
+          <div id="cmCapFill" class="cm-fill"></div>
+          <div class="cm-scale">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div id="cmCapPct" class="cm-pct">0</div>
+      </div>
+      <div class="console-meter-block">
+        <div class="cm-label">ROOM MIC</div>
+        <div class="cm-track alt">
+          <div id="cmMicFill" class="cm-fill warm"></div>
+          <div class="cm-scale">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div id="cmMicPct" class="cm-pct">0</div>
+      </div>
+    </div>
+
+    <div class="console-right">
+      <div class="console-status-text">
+        <div id="csSession" class="cs-line">Ready</div>
+        <div id="csCapture" class="cs-line cs-muted">Idle</div>
+        <div id="csCal"     class="cs-line cs-muted">Calibration idle.</div>
+      </div>
+      <div class="console-add-row">
+        <button id="addOutputBtn" class="ctrl-btn ctrl-btn-accent">+ Add Channel</button>
+        <span id="csError" class="cs-error hidden"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ CHANNEL RACK ═══════════════════════ -->
+  <!-- Hardware-style horizontal rack with vertical level meters    -->
+  <section class="channel-rack">
+    <div class="rack-label-col">
+      <div class="rack-section-label">OUTPUT CHANNELS</div>
+    </div>
+    <div class="rack-strips-viewport">
+      <div id="rackStrips" class="rack-strips">
+        <!-- Populated by JS -->
+        <div class="rack-empty" id="rackEmpty">No output routes. Click + Add Channel to get started.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ BOTTOM DECK ═══════════════════════ -->
+  <div class="bottom-deck">
+
+    <!-- LEFT: Signal + Sync -->
+    <aside class="deck-panel deck-left">
+      <section class="dp-module">
+        <div class="dp-hd"><span class="dp-lbl">Signal Source</span></div>
+        <label class="dp-field">
+          <span>Input</span>
+          <select id="inputSelect" class="dp-sel"></select>
+        </label>
+        <label class="dp-field">
+          <span>Cal Mic</span>
+          <select id="calibSelect" class="dp-sel"></select>
+        </label>
+        <label class="dp-toggle">
+          <input id="testToneChk" type="checkbox">
+          <span>440 Hz test tone</span>
+        </label>
+      </section>
+
+      <section class="dp-module">
+        <div class="dp-hd">
+          <span class="dp-lbl">Auto-Sync</span>
+          <label class="dp-field-inline">
+            <span id="markerLbl">Marker 0.0%</span>
+            <input id="markerRange" type="range" min="0" max="5" step="0.1" class="dp-range-inline">
+          </label>
+        </div>
+        <div class="dp-seg" id="syncGroup" role="group" aria-label="Sync mode">
+          <button class="dp-seg-btn" data-sync-mode="Off">Off</button>
+          <button class="dp-seg-btn" data-sync-mode="MonitorOnly">Monitor</button>
+          <button class="dp-seg-btn" data-sync-mode="Control">Control</button>
+        </div>
+      </section>
+
+      <section class="dp-module dp-calibration">
+        <div class="dp-hd">
+          <span class="dp-lbl">Calibration</span>
+          <span id="calHealthBadge" class="dp-badge">Idle</span>
+        </div>
+        <div class="cal-row">
+          <strong id="calTitle">Ready</strong>
+          <span id="calStage" class="cal-stage">—</span>
+        </div>
+        <p id="calGuidance" class="cal-hint">Start calibration to measure delays.</p>
+        <div id="calAttempts" class="cal-list"></div>
+      </section>
+    </aside>
+
+    <!-- CENTER: Selected Channel Detail -->
+    <main class="deck-panel deck-center">
+      <section class="dp-module dp-focus" id="focusModule">
+        <div class="dp-hd">
+          <span class="dp-lbl" id="focusLabel">No Channel Selected</span>
+          <div class="dp-hd-right" id="focusActions" style="display:none">
+            <a id="focusOpenLink" class="open-ctrl-link" href="/v2/">Full Control →</a>
+          </div>
+        </div>
+        <div id="focusContent" class="focus-content">
+          <p class="focus-empty">Click a channel strip above to inspect it here.</p>
+        </div>
+      </section>
+
+      <section class="dp-module dp-log">
+        <div class="dp-hd">
+          <span class="dp-lbl">Session Log <span id="logBadge" class="dp-badge">0</span></span>
+          <button id="copyLogsBtn" class="ctrl-btn">Copy</button>
+        </div>
+        <pre id="logOutput" class="log-pre">No log entries yet.</pre>
+      </section>
+    </main>
+
+    <!-- RIGHT: Workspaces -->
+    <aside class="deck-panel deck-right">
+      <section class="dp-module">
+        <div class="dp-hd"><span class="dp-lbl">Workspaces</span></div>
+        <div class="ws-list">
+          <a class="ws-item" href="/">
+            <div class="ws-item-top"><span class="ws-name">Launch Deck</span><span class="ws-arr">↗</span></div>
+            <p class="ws-desc">Original nav hub and control surface.</p>
+          </a>
+          <div class="ws-item ws-current" aria-current="page">
+            <div class="ws-item-top"><span class="ws-name">Neo Deck</span><span class="ws-now">● current</span></div>
+            <p class="ws-desc">Dashboard monitoring with hardware-style rack.</p>
+          </div>
+          <a class="ws-item" href="/v2/">
+            <div class="ws-item-top"><span class="ws-name">v2 Control</span><span class="ws-arr">↗</span></div>
+            <p class="ws-desc">Full DAW mixer — sliders, delay, diagnostics.</p>
+          </a>
+          <a class="ws-item" href="/v2-Dashboard/">
+            <div class="ws-item-top"><span class="ws-name">Dashboard</span><span class="ws-arr">↗</span></div>
+            <p class="ws-desc">Multi-panel view with resizable layout.</p>
+          </a>
+          <a class="ws-item" href="/v2-Codex/">
+            <div class="ws-item-top"><span class="ws-name">Codex</span><span class="ws-arr">↗</span></div>
+            <p class="ws-desc">Extended diagnostics and alternate surface.</p>
+          </a>
+          <a class="ws-item" href="/v2-Tactile/">
+            <div class="ws-item-top"><span class="ws-name">Tactile</span><span class="ws-arr">↗</span></div>
+            <p class="ws-desc">Hardware-style knobs and faders for touch.</p>
+          </a>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div id="toastStack" class="toast-stack"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
