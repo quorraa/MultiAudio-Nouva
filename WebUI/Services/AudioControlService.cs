@@ -37,7 +37,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     private const int MaxLogEntries = 160;
     private const int BroadcastDebounceMilliseconds = 33;
-    private const int TelemetryDebounceMilliseconds = 16;
+    private const int TelemetryDebounceMilliseconds = 33;
 
     private readonly AppLogger _logger;
     private readonly DeviceService _deviceService;

@@ -22,6 +22,8 @@ let telePollTimer = null;
 let pendingTelemetryFrame = null;
 let telemetryPatchFrame = 0;
 const telemetryNodeCache = new Map();
+let calibrationRenderKey = "";
+let selectedDeviceRenderKey = "";
 let copyBuf = null;
 let holdState = null;
 let calibInFlight = false;
@@ -694,7 +696,7 @@ function renderSelectedPanel() {
     el.openDeviceProfileBtn.disabled = true;
     meterFill(el.summaryConfidenceMeter, 0);
     meterFill(el.summaryRateMeter, 0);
-    el.selectedDeviceSelect.innerHTML = `<option value="">No route selected</option>`;
+    renderSelectedDeviceSelect(null);
     return;
   }
 
@@ -708,7 +710,7 @@ function renderSelectedPanel() {
   el.summaryOutputName.textContent = selected.selectedDeviceName || `Output ${selected.slotIndex}`;
   el.summaryOutputDevice.textContent = selected.selectedDeviceName || `${selected.statusText || "Idle"}`;
   el.openDeviceProfileBtn.disabled = !selected.selectedDeviceId;
-  renderSelect(el.selectedDeviceSelect, state.playbackDevices, selected.selectedDeviceId, !state.canEditTopology, "Choose device...");
+  renderSelectedDeviceSelect(selected);
   setRange(el.selectedVolumeRange, selected.volumePercent);
   el.selectedVolumeValue.textContent = `${Math.round(selected.volumePercent)}%`;
   setRange(el.selectedDelayRange, selected.delayMilliseconds);
@@ -763,15 +765,40 @@ function renderSelectedPanel() {
   el.selectedDelayPlusBtn.disabled = state.isCalibrating;
 }
 
+function renderSelectedDeviceSelect(selected) {
+  const optionKey = (state?.playbackDevices || []).map((device) => `${device.id}:${device.displayName}`).join("|");
+  const nextKey = selected
+    ? `${selected.selectedDeviceId || ""}|${state.canEditTopology ? "1" : "0"}|${optionKey}`
+    : `none|${optionKey}`;
+  if (selectedDeviceRenderKey !== nextKey) {
+    if (dirty(el.selectedDeviceSelect)) {
+      return;
+    }
+    selectedDeviceRenderKey = nextKey;
+    if (!selected) {
+      el.selectedDeviceSelect.innerHTML = `<option value="">No route selected</option>`;
+    } else {
+      renderSelect(el.selectedDeviceSelect, state.playbackDevices, selected.selectedDeviceId, !state.canEditTopology, "Choose device...");
+    }
+  }
+  el.selectedDeviceSelect.disabled = selected ? !state.canEditTopology : true;
+}
+
 function renderCalibration() {
   const model = calibrationModel(telemetryState || state);
-  el.calTitle.textContent = `${model.title} — ${model.stage}`;
-  el.calMicHealth.textContent = model.micHealth;
-  el.calGuidance.textContent = model.guidance;
+  setText(el.calTitle, `${model.title} — ${model.stage}`);
+  setText(el.calMicHealth, model.micHealth);
+  setText(el.calGuidance, model.guidance);
   const entries = getCalibrationEntries();
-  el.calAttemptsList.innerHTML = entries.length
-    ? entries.map((entry) => `<div class="cal-attempt ${entry.tone}"><time>${escapeHtml(entry.time)}</time><span>${escapeHtml(entry.text)}</span></div>`).join("")
-    : `<div class="cal-attempt"><span>No recent calibration attempts yet.</span></div>`;
+  const nextKey = entries.length
+    ? entries.map((entry) => `${entry.time}|${entry.tone}|${entry.text}`).join("\n")
+    : "empty";
+  if (calibrationRenderKey !== nextKey) {
+    calibrationRenderKey = nextKey;
+    el.calAttemptsList.innerHTML = entries.length
+      ? entries.map((entry) => `<div class="cal-attempt ${entry.tone}"><time>${escapeHtml(entry.time)}</time><span>${escapeHtml(entry.text)}</span></div>`).join("")
+      : `<div class="cal-attempt"><span>No recent calibration attempts yet.</span></div>`;
+  }
 }
 
 function renderLogs() {
@@ -787,13 +814,13 @@ function patchTele(frame) {
   }
 
   const mode = frame.isCalibrating ? "calibrating" : frame.isRunning ? "live" : "offline";
-  el.enginePill.className = `engine-pill ${mode}`;
-  el.enginePill.textContent = mode.toUpperCase();
+  setClassName(el.enginePill, `engine-pill ${mode}`);
+  setText(el.enginePill, mode.toUpperCase());
 
   meterFill(el.vuCapture, frame.captureLevel || 0);
   meterFill(el.vuRoom, frame.roomMicLevel || 0);
-  el.vuCapturePct.textContent = Math.round((frame.captureLevel || 0) * 100);
-  el.vuRoomPct.textContent = Math.round((frame.roomMicLevel || 0) * 100);
+  setText(el.vuCapturePct, String(Math.round((frame.captureLevel || 0) * 100)));
+  setText(el.vuRoomPct, String(Math.round((frame.roomMicLevel || 0) * 100)));
 
   for (const teleOut of frame.outputs || []) {
     const nodes = getTelemetryNodes(teleOut.slotIndex);
@@ -810,22 +837,22 @@ function patchTele(frame) {
       setMeterPercent(nodes.meter, routeMeterPct(teleOut.meterLevel));
     }
     if (nodes.meterLabel) {
-      nodes.meterLabel.textContent = routeMeterLabel(teleOut.meterLevel);
+      setText(nodes.meterLabel, routeMeterLabel(teleOut.meterLevel));
     }
     if (nodes.delayLed) {
-      nodes.delayLed.firstChild.textContent = String(Math.round(teleOut.delayMilliseconds || 0));
+      setText(nodes.delayLed.firstChild, String(Math.round(teleOut.delayMilliseconds || 0)));
     }
     if (nodes.syncLed) {
-      nodes.syncLed.firstChild.textContent = String(Math.round((teleOut.syncConfidence || 0) * 100));
+      setText(nodes.syncLed.firstChild, String(Math.round((teleOut.syncConfidence || 0) * 100)));
     }
     if (nodes.rateLed) {
-      nodes.rateLed.firstChild.textContent = Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1);
+      setText(nodes.rateLed.firstChild, Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1));
     }
     if (nodes.volumeReadout) {
-      nodes.volumeReadout.textContent = `${liveVolume}%`;
+      setText(nodes.volumeReadout, `${liveVolume}%`);
     }
     if (nodes.status) {
-      nodes.status.textContent = teleOut.statusText || "Idle";
+      setText(nodes.status, teleOut.statusText || "Idle");
     }
     if (nodes.coherence) {
       patchSegments(nodes.coherence, routeMeterPct(teleOut.meterLevel), channelColor(teleOut.slotIndex));
@@ -834,39 +861,78 @@ function patchTele(frame) {
       patchSegments(nodes.confidence, Math.round((teleOut.syncConfidence || 0) * 100), channelColor(teleOut.slotIndex));
     }
     if (nodes.faderFill) {
-      nodes.faderFill.style.height = `${liveVolume}%`;
+      setStyle(nodes.faderFill, "height", `${liveVolume}%`);
     }
     if (nodes.faderCap) {
-      nodes.faderCap.style.top = `${faderCapTop(liveVolume)}px`;
+      setStyle(nodes.faderCap, "top", `${faderCapTop(liveVolume)}px`);
     }
     if (nodes.faderValue) {
-      nodes.faderValue.textContent = `${liveVolume}%`;
+      setText(nodes.faderValue, `${liveVolume}%`);
     }
     if (nodes.volumeKnob) {
-      nodes.volumeKnob.style.setProperty("--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
+      setStyle(nodes.volumeKnob, "--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
     }
     if (nodes.delayKnob) {
-      nodes.delayKnob.style.setProperty("--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
+      setStyle(nodes.delayKnob, "--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
     }
     if (nodes.volumeKnobReadout) {
-      nodes.volumeKnobReadout.textContent = `${liveVolume}%`;
+      setText(nodes.volumeKnobReadout, `${liveVolume}%`);
     }
     if (nodes.delayKnobReadout) {
-      nodes.delayKnobReadout.textContent = `${liveDelay} ms`;
+      setText(nodes.delayKnobReadout, `${liveDelay} ms`);
     }
     if (nodes.masterTag) {
       const isMaster = !!route?.isTimingMaster;
-      nodes.masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
+      setText(nodes.masterTag, isMaster ? "Master" : route?.syncLockState || "Manual");
       nodes.masterTag.classList.toggle("is-active", isMaster);
     }
   }
 
-  el.sessionStatus.textContent = frame.sessionStatusMessage || state.sessionStatusMessage || "Ready";
-  el.captureStatus.textContent = frame.captureStatusText || state.captureStatusText || "Idle";
-  el.calibrationStatus.textContent = frame.calibrationStatusMessage || state.calibrationStatusMessage || "Idle";
+  setText(el.sessionStatus, frame.sessionStatusMessage || state.sessionStatusMessage || "Ready");
+  setText(el.captureStatus, frame.captureStatusText || state.captureStatusText || "Idle");
+  setText(el.calibrationStatus, frame.calibrationStatusMessage || state.calibrationStatusMessage || "Idle");
 
   renderCalibration();
-  renderSelectedPanel();
+  patchSelectedTelemetry();
+}
+
+function patchSelectedTelemetry() {
+  const selected = findRoute(selectedSlot) || state.outputs?.[0] || null;
+  if (!selected) {
+    return;
+  }
+  const color = channelColor(selected.slotIndex);
+  const latency = Math.max(0, Number(selected.estimatedArrivalMilliseconds || 0));
+  const buffer = Math.max(0, Number(selected.bufferedMilliseconds || 0));
+  const confidence = Math.round((selected.syncConfidence || 0) * 100);
+  const rate = Number(selected.playbackRateRatio || 1);
+
+  setText(el.selectedChannelStatus, selected.syncLockState || "Manual");
+  setStyle(el.selectedChannelStatus, "color", color);
+  setText(el.selectedChannelDevice, `${selected.statusText || "Idle"} · ${selected.syncSummary || "Manual"}`);
+  setRange(el.selectedVolumeRange, selected.volumePercent);
+  setRange(el.selectedDelayRange, selected.delayMilliseconds);
+  if (document.activeElement !== el.selectedDelayNumber) {
+    el.selectedDelayNumber.value = Math.round(selected.delayMilliseconds);
+  }
+  setText(el.selectedVolumeValue, `${Math.round(selected.volumePercent)}%`);
+  setText(el.selectedDelayValue, `${Math.round(selected.delayMilliseconds)} ms`);
+  setText(el.selectedDelayFoot, `Effective ${Math.round(selected.effectiveDelayMilliseconds || selected.delayMilliseconds)} ms`);
+  setText(el.selectedLatencyValue, `${latency.toFixed(1)} ms`);
+  setText(el.selectedBufferValue, `${Math.round(buffer)} ms`);
+  setText(el.selectedConfidenceValue, `${confidence}%`);
+  setText(el.selectedRateValue, `${rate.toFixed(4)}x`);
+  setText(el.summaryDelayValue, `${Math.round(selected.delayMilliseconds)} ms`);
+  setText(el.summaryDriftValue, `${Math.abs((Number(selected.playbackRateRatio || 1) - 1) * 1000).toFixed(1)} ms`);
+  setText(el.summaryConfidenceValue, `${confidence}%`);
+  setText(el.summaryRateValue, `${rate.toFixed(4)}x`);
+
+  meterFill(el.selectedLatencyMeter, clamp(latency / 500, 0, 1));
+  meterFill(el.selectedBufferMeter, clamp(buffer / 500, 0, 1));
+  meterFill(el.selectedConfidenceMeter, clamp(confidence / 100, 0, 1));
+  meterFill(el.selectedRateMeter, clamp(Math.abs(rate - 1) * 12, 0, 1));
+  meterFill(el.summaryConfidenceMeter, clamp(confidence / 100, 0, 1));
+  meterFill(el.summaryRateMeter, clamp(Math.abs(rate - 1) * 12, 0, 1));
 }
 
 function getTelemetryNodes(slotIndex) {
@@ -1607,6 +1673,25 @@ function setRange(input, value) {
   if (!dirty(input)) {
     input.value = value;
   }
+}
+
+function setText(node, value) {
+  if (node && node.textContent !== value) {
+    node.textContent = value;
+  }
+}
+
+function setClassName(node, value) {
+  if (node && node.className !== value) {
+    node.className = value;
+  }
+}
+
+function setStyle(node, property, value) {
+  if (!node || node.style.getPropertyValue(property) === value) {
+    return;
+  }
+  node.style.setProperty(property, value);
 }
 
 function dirty(input) {
