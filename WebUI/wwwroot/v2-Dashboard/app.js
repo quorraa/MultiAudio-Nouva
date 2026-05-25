@@ -19,6 +19,9 @@ let evStream = null;
 let teleStream = null;
 let fbTimer = null;
 let telePollTimer = null;
+let pendingTelemetryFrame = null;
+let telemetryPatchFrame = 0;
+const telemetryNodeCache = new Map();
 let copyBuf = null;
 let holdState = null;
 let calibInFlight = false;
@@ -417,7 +420,21 @@ function setTelemetry(next) {
   }
   telemetryState = next;
   mergeTele(next);
-  patchTele(next);
+  scheduleTelemetryPatch(next);
+}
+
+function scheduleTelemetryPatch(frame) {
+  pendingTelemetryFrame = frame;
+  if (telemetryPatchFrame) {
+    return;
+  }
+
+  telemetryPatchFrame = requestAnimationFrame(() => {
+    telemetryPatchFrame = 0;
+    const frameToPatch = pendingTelemetryFrame;
+    pendingTelemetryFrame = null;
+    patchTele(frameToPatch);
+  });
 }
 
 function mergeTele(frame) {
@@ -528,6 +545,7 @@ function renderRack() {
 }
 
 function renderStrips() {
+  telemetryNodeCache.clear();
   el.channelStrips.innerHTML = (state.outputs || []).map((output) => renderStrip(mergeDraft(output))).join("");
 }
 
@@ -778,85 +796,68 @@ function patchTele(frame) {
   el.vuRoomPct.textContent = Math.round((frame.roomMicLevel || 0) * 100);
 
   for (const teleOut of frame.outputs || []) {
-    const strip = el.channelStrips.querySelector(`[data-slot="${teleOut.slotIndex}"]`);
-    if (!strip) {
+    const nodes = getTelemetryNodes(teleOut.slotIndex);
+    if (!nodes) {
       continue;
     }
-    const meter = strip.querySelector(`[data-meter="${teleOut.slotIndex}"]`);
-    const meterLabel = strip.querySelector(`[data-meter-label="${teleOut.slotIndex}"]`);
-    const delayLed = strip.querySelector(`[data-led-delay="${teleOut.slotIndex}"]`);
-    const syncLed = strip.querySelector(`[data-led-sync="${teleOut.slotIndex}"]`);
-    const rateLed = strip.querySelector(`[data-led-rate="${teleOut.slotIndex}"]`);
-    const volumeReadout = strip.querySelector(`[data-volume-readout="${teleOut.slotIndex}"]`);
-    const status = strip.querySelector(".strip-subtitle");
-    const coherence = strip.querySelector('[data-segments="coherence"]');
-    const confidence = strip.querySelector('[data-segments="confidence"]');
-    const faderFill = strip.querySelector(".fader-fill");
-    const faderCap = strip.querySelector(`[data-fader-cap="${teleOut.slotIndex}"]`);
-    const faderValue = strip.querySelector(`[data-fader-value="${teleOut.slotIndex}"]`);
-    const masterTag = strip.querySelector(".strip-master-tag");
-    const volumeKnob = strip.querySelector('[data-knob-field="volume"]');
-    const delayKnob = strip.querySelector('[data-knob-field="delay"]');
-    const volumeKnobReadout = strip.querySelector('[data-knob-readout="volume"]');
-    const delayKnobReadout = strip.querySelector('[data-knob-readout="delay"]');
     const liveVolume = Math.round(teleOut.appliedVolumePercent ?? teleOut.volumePercent ?? 0);
     const liveDelay = Math.round(teleOut.delayMilliseconds || 0);
     // isTimingMaster and syncLockState are not reliable from SSE (integer enums, missing fields).
     // Read from the authoritative state object so patchTele and renderStrips() stay in sync.
     const route = findRoute(teleOut.slotIndex);
 
-    if (meter) {
-      setMeterPercent(meter, routeMeterPct(teleOut.meterLevel));
+    if (nodes.meter) {
+      setMeterPercent(nodes.meter, routeMeterPct(teleOut.meterLevel));
     }
-    if (meterLabel) {
-      meterLabel.textContent = routeMeterLabel(teleOut.meterLevel);
+    if (nodes.meterLabel) {
+      nodes.meterLabel.textContent = routeMeterLabel(teleOut.meterLevel);
     }
-    if (delayLed) {
-      delayLed.innerHTML = `${Math.round(teleOut.delayMilliseconds || 0)}<small>ms</small>`;
+    if (nodes.delayLed) {
+      nodes.delayLed.firstChild.textContent = String(Math.round(teleOut.delayMilliseconds || 0));
     }
-    if (syncLed) {
-      syncLed.innerHTML = `${Math.round((teleOut.syncConfidence || 0) * 100)}<small>%</small>`;
+    if (nodes.syncLed) {
+      nodes.syncLed.firstChild.textContent = String(Math.round((teleOut.syncConfidence || 0) * 100));
     }
-    if (rateLed) {
-      rateLed.innerHTML = `${Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1)}<small>ms</small>`;
+    if (nodes.rateLed) {
+      nodes.rateLed.firstChild.textContent = Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1);
     }
-    if (volumeReadout) {
-      volumeReadout.textContent = `${liveVolume}%`;
+    if (nodes.volumeReadout) {
+      nodes.volumeReadout.textContent = `${liveVolume}%`;
     }
-    if (status) {
-      status.textContent = teleOut.statusText || "Idle";
+    if (nodes.status) {
+      nodes.status.textContent = teleOut.statusText || "Idle";
     }
-    if (coherence) {
-      coherence.innerHTML = renderSegments(routeMeterPct(teleOut.meterLevel), channelColor(teleOut.slotIndex));
+    if (nodes.coherence) {
+      patchSegments(nodes.coherence, routeMeterPct(teleOut.meterLevel), channelColor(teleOut.slotIndex));
     }
-    if (confidence) {
-      confidence.innerHTML = renderSegments(Math.round((teleOut.syncConfidence || 0) * 100), channelColor(teleOut.slotIndex));
+    if (nodes.confidence) {
+      patchSegments(nodes.confidence, Math.round((teleOut.syncConfidence || 0) * 100), channelColor(teleOut.slotIndex));
     }
-    if (faderFill) {
-      faderFill.style.height = `${liveVolume}%`;
+    if (nodes.faderFill) {
+      nodes.faderFill.style.height = `${liveVolume}%`;
     }
-    if (faderCap) {
-      faderCap.style.top = `${faderCapTop(liveVolume)}px`;
+    if (nodes.faderCap) {
+      nodes.faderCap.style.top = `${faderCapTop(liveVolume)}px`;
     }
-    if (faderValue) {
-      faderValue.textContent = `${liveVolume}%`;
+    if (nodes.faderValue) {
+      nodes.faderValue.textContent = `${liveVolume}%`;
     }
-    if (volumeKnob) {
-      volumeKnob.style.setProperty("--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
+    if (nodes.volumeKnob) {
+      nodes.volumeKnob.style.setProperty("--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
     }
-    if (delayKnob) {
-      delayKnob.style.setProperty("--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
+    if (nodes.delayKnob) {
+      nodes.delayKnob.style.setProperty("--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
     }
-    if (volumeKnobReadout) {
-      volumeKnobReadout.textContent = `${liveVolume}%`;
+    if (nodes.volumeKnobReadout) {
+      nodes.volumeKnobReadout.textContent = `${liveVolume}%`;
     }
-    if (delayKnobReadout) {
-      delayKnobReadout.textContent = `${liveDelay} ms`;
+    if (nodes.delayKnobReadout) {
+      nodes.delayKnobReadout.textContent = `${liveDelay} ms`;
     }
-    if (masterTag) {
+    if (nodes.masterTag) {
       const isMaster = !!route?.isTimingMaster;
-      masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
-      masterTag.classList.toggle("is-active", isMaster);
+      nodes.masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
+      nodes.masterTag.classList.toggle("is-active", isMaster);
     }
   }
 
@@ -866,6 +867,40 @@ function patchTele(frame) {
 
   renderCalibration();
   renderSelectedPanel();
+}
+
+function getTelemetryNodes(slotIndex) {
+  if (telemetryNodeCache.has(slotIndex)) {
+    return telemetryNodeCache.get(slotIndex);
+  }
+
+  const strip = el.channelStrips.querySelector(`[data-slot="${slotIndex}"]`);
+  if (!strip) {
+    telemetryNodeCache.set(slotIndex, null);
+    return null;
+  }
+
+  const nodes = {
+    meter: strip.querySelector(`[data-meter="${slotIndex}"]`),
+    meterLabel: strip.querySelector(`[data-meter-label="${slotIndex}"]`),
+    delayLed: strip.querySelector(`[data-led-delay="${slotIndex}"]`),
+    syncLed: strip.querySelector(`[data-led-sync="${slotIndex}"]`),
+    rateLed: strip.querySelector(`[data-led-rate="${slotIndex}"]`),
+    volumeReadout: strip.querySelector(`[data-volume-readout="${slotIndex}"]`),
+    status: strip.querySelector(".strip-subtitle"),
+    coherence: strip.querySelector('[data-segments="coherence"]'),
+    confidence: strip.querySelector('[data-segments="confidence"]'),
+    faderFill: strip.querySelector(".fader-fill"),
+    faderCap: strip.querySelector(`[data-fader-cap="${slotIndex}"]`),
+    faderValue: strip.querySelector(`[data-fader-value="${slotIndex}"]`),
+    masterTag: strip.querySelector(".strip-master-tag"),
+    volumeKnob: strip.querySelector('[data-knob-field="volume"]'),
+    delayKnob: strip.querySelector('[data-knob-field="delay"]'),
+    volumeKnobReadout: strip.querySelector('[data-knob-readout="volume"]'),
+    delayKnobReadout: strip.querySelector('[data-knob-readout="delay"]')
+  };
+  telemetryNodeCache.set(slotIndex, nodes);
+  return nodes;
 }
 
 function handleChInput(event) {
@@ -1846,6 +1881,26 @@ function stepMeters() {
 
   if (keepRunning || animatedMeters.size) {
     meterAnimationFrame = requestAnimationFrame(stepMeters);
+  }
+}
+
+function patchSegments(element, percent, color) {
+  const nextPercent = String(Math.max(0, Math.min(100, Math.round(Number(percent || 0)))));
+  const nextColor = String(color || "");
+  if (element.dataset.percent === nextPercent && element.dataset.color === nextColor) {
+    return;
+  }
+
+  element.dataset.percent = nextPercent;
+  element.dataset.color = nextColor;
+  const lit = Math.max(0, Math.min(6, Math.round(Number(nextPercent) / (100 / 6))));
+  const segments = element.children;
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const active = index < lit;
+    segment.classList.toggle("is-active", active);
+    segment.style.background = active ? nextColor : "";
+    segment.style.boxShadow = active ? `0 0 8px ${nextColor}55` : "";
   }
 }
 
