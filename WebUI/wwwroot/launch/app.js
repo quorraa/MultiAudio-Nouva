@@ -2,7 +2,7 @@ const POLL_MS = 2000;
 const SAFETY_MS = 1000;
 const STALE_MS = 4000;
 const TELE_STALE_MS = 2500;
-const TELE_POLL_MS = 90;
+const TELE_POLL_MS = 250;
 const SETTINGS_DEBOUNCE_MS = 220;
 const RETRY_MS = 1600;
 
@@ -14,6 +14,9 @@ let eventStream = null;
 let teleStream = null;
 let fallbackTimer = null;
 let telePollTimer = null;
+let pendingTelemetryFrame = null;
+let telemetryPatchFrame = 0;
+let attemptsRenderKey = "";
 let settingsTimer = null;
 let lastStateAt = 0;
 let lastTeleAt = 0;
@@ -435,7 +438,34 @@ function setTelemetry(nextTelemetry) {
   }
   telemetryState = nextTelemetry;
   mergeTelemetryIntoState(nextTelemetry);
-  render();
+  scheduleTelemetryPatch(nextTelemetry);
+}
+
+function scheduleTelemetryPatch(frame) {
+  pendingTelemetryFrame = frame;
+  if (telemetryPatchFrame) {
+    return;
+  }
+  telemetryPatchFrame = requestAnimationFrame(() => {
+    telemetryPatchFrame = 0;
+    const frameToPatch = pendingTelemetryFrame;
+    pendingTelemetryFrame = null;
+    patchTelemetry(frameToPatch);
+  });
+}
+
+function patchTelemetry(frame) {
+  if (!frame || !state) {
+    return;
+  }
+  renderControls();
+  renderFocusPanels();
+  renderPulse();
+  renderCalibrationWatch();
+  for (const output of state.outputs || []) {
+    const meter = el.channelPills.querySelector(`[data-pill-meter="${output.slotIndex}"]`);
+    updateMeterPercent(meter, Math.round((output.syncConfidence || 0) * 100));
+  }
 }
 
 function mergeTelemetryIntoState(nextTelemetry) {
@@ -682,12 +712,16 @@ function renderCalibrationWatch() {
 
   const attempts = recentCalibrationEntries();
   el.attemptsMeta.textContent = attempts.length ? `${attempts.length} recent entries` : "No recent attempts";
-  el.attemptsList.innerHTML = attempts.map((entry) => `
-    <div class="attempt-entry">
-      <time>${escapeHtml(entry.time || "--:--:--")}</time>
-      <p>${escapeHtml(entry.text || "")}</p>
-    </div>
-  `).join("");
+  const nextKey = attempts.map((entry) => `${entry.time}|${entry.text}`).join("\n");
+  if (attemptsRenderKey !== nextKey) {
+    attemptsRenderKey = nextKey;
+    el.attemptsList.innerHTML = attempts.map((entry) => `
+      <div class="attempt-entry">
+        <time>${escapeHtml(entry.time || "--:--:--")}</time>
+        <p>${escapeHtml(entry.text || "")}</p>
+      </div>
+    `).join("");
+  }
 }
 
 function renderLogs() {

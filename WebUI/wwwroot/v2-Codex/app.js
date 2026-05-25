@@ -4,7 +4,7 @@ const POLL_MS = 2000;
 const SAFETY_MS = 1000;
 const STALE_MS = 4000;
 const TELE_STALE_MS = 2500;
-const TELE_POLL_MS = 90;
+const TELE_POLL_MS = 250;
 const SETTINGS_DEBOUNCE_MS = 220;
 const ROUTE_DEBOUNCE_MS = 140;
 const HOLD_MS = 120;
@@ -19,6 +19,9 @@ let evStream = null;
 let teleStream = null;
 let fbTimer = null;
 let telePollTimer = null;
+let pendingTelemetryFrame = null;
+let telemetryPatchFrame = 0;
+let calibrationRenderKey = "";
 let copyBuf = null;
 let holdState = null;
 let calibInFlight = false;
@@ -226,7 +229,18 @@ function setTelemetry(next) {
   if (telemetryState && (next.telemetryRevision || 0) < (telemetryState.telemetryRevision || 0)) return;
   telemetryState = next;
   mergeTele(next);
-  patchTele(next);
+  scheduleTelemetryPatch(next);
+}
+
+function scheduleTelemetryPatch(frame) {
+  pendingTelemetryFrame = frame;
+  if (telemetryPatchFrame) return;
+  telemetryPatchFrame = requestAnimationFrame(() => {
+    telemetryPatchFrame = 0;
+    const frameToPatch = pendingTelemetryFrame;
+    pendingTelemetryFrame = null;
+    patchTele(frameToPatch);
+  });
 }
 
 function mergeTele(f) {
@@ -403,9 +417,13 @@ function renderCal() {
   el.calCapturePct.textContent = pct((telemetryState || state).captureLevel || 0);
   const entries = getCalEntries();
   el.calAttemptsMeta.textContent = entries.length ? `${entries.length} recent events` : "No recent attempts";
-  el.calAttemptsList.innerHTML = entries.length
-    ? entries.map(e => `<div class="cal-ev ${e.tone}"><span class="cal-ev-time">${esc(e.time)}</span>${esc(e.text)}</div>`).join("")
-    : `<p class="rack-cal-hint">Attempt-by-attempt calibration feedback will appear here.</p>`;
+  const nextCalKey = entries.length ? entries.map(e => `${e.time}|${e.tone}|${e.text}`).join("\n") : "empty";
+  if (calibrationRenderKey !== nextCalKey) {
+    calibrationRenderKey = nextCalKey;
+    el.calAttemptsList.innerHTML = entries.length
+      ? entries.map(e => `<div class="cal-ev ${e.tone}"><span class="cal-ev-time">${esc(e.time)}</span>${esc(e.text)}</div>`).join("")
+      : `<p class="rack-cal-hint">Attempt-by-attempt calibration feedback will appear here.</p>`;
+  }
 }
 
 function renderLogs() {
@@ -451,7 +469,7 @@ function patchTele(f) {
       const dv = strip.querySelector(".ch-fld:nth-child(2) .ch-fld-val");
       const dn = strip.querySelector('[data-field="delay-number"]');
       const dr = strip.querySelector('[data-field="delay"]');
-      if (dv) dv.innerHTML = `${Math.round(t.delayMilliseconds)}<small>ms</small>`;
+      if (dv?.firstChild) dv.firstChild.textContent = String(Math.round(t.delayMilliseconds));
       if (dn && document.activeElement !== dn) dn.value = Math.round(t.delayMilliseconds);
       if (dr && document.activeElement !== dr) dr.value = Math.round(t.delayMilliseconds);
     }

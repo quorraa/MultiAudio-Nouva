@@ -2,7 +2,7 @@ const POLL_MS = 2000;
 const SAFETY_MS = 1000;
 const STALE_MS = 4000;
 const TELE_STALE_MS = 2500;
-const TELE_POLL_MS = 90;
+const TELE_POLL_MS = 250;
 const INTERACT_PAUSE_MS = 900;
 const SETTINGS_DEBOUNCE_MS = 220;
 const ROUTE_DEBOUNCE_MS = 140;
@@ -19,6 +19,11 @@ let evStream = null;
 let teleStream = null;
 let fbTimer = null;
 let telePollTimer = null;
+let pendingTelemetryFrame = null;
+let telemetryPatchFrame = 0;
+const telemetryNodeCache = new Map();
+let calibrationRenderKey = "";
+let selectedDeviceRenderKey = "";
 let copyBuf = null;
 let holdState = null;
 let calibInFlight = false;
@@ -402,7 +407,21 @@ function setTelemetry(next) {
   }
   telemetryState = next;
   mergeTele(next);
-  patchTele(next);
+  scheduleTelemetryPatch(next);
+}
+
+function scheduleTelemetryPatch(frame) {
+  pendingTelemetryFrame = frame;
+  if (telemetryPatchFrame) {
+    return;
+  }
+
+  telemetryPatchFrame = requestAnimationFrame(() => {
+    telemetryPatchFrame = 0;
+    const frameToPatch = pendingTelemetryFrame;
+    pendingTelemetryFrame = null;
+    patchTele(frameToPatch);
+  });
 }
 
 function mergeTele(frame) {
@@ -513,6 +532,7 @@ function renderRack() {
 }
 
 function renderStrips() {
+  telemetryNodeCache.clear();
   el.channelStrips.innerHTML = (state.outputs || []).map((output) => renderStrip(mergeDraft(output))).join("");
 }
 
@@ -607,7 +627,7 @@ function renderSelectedPanel() {
     el.selectedChannelStatus.style.color = "";
     el.selectedChannelName.textContent = "No route selected";
     el.selectedChannelDevice.textContent = "Add or select an output strip.";
-    el.selectedDeviceSelect.innerHTML = `<option value="">No route selected</option>`;
+    renderSelectedDeviceSelect(null);
     return;
   }
 
@@ -618,7 +638,7 @@ function renderSelectedPanel() {
   el.selectedChannelStatus.style.color = color;
   el.selectedChannelName.textContent = selected.selectedDeviceName || `Output ${selected.slotIndex}`;
   el.selectedChannelDevice.textContent = `${selected.statusText || "Idle"} · ${selected.syncSummary || "Manual"}`;
-  renderSelect(el.selectedDeviceSelect, state.playbackDevices, selected.selectedDeviceId, !state.canEditTopology, "Choose device...");
+  renderSelectedDeviceSelect(selected);
   setRange(el.selectedVolumeRange, selected.volumePercent);
   el.selectedVolumeValue.textContent = `${Math.round(selected.volumePercent)}%`;
   setRange(el.selectedDelayRange, selected.delayMilliseconds);
@@ -667,15 +687,40 @@ function renderSelectedPanel() {
   el.selectedDelayPlusBtn.disabled = state.isCalibrating;
 }
 
+function renderSelectedDeviceSelect(selected) {
+  const optionKey = (state?.playbackDevices || []).map((device) => `${device.id}:${device.displayName}`).join("|");
+  const nextKey = selected
+    ? `${selected.selectedDeviceId || ""}|${state.canEditTopology ? "1" : "0"}|${optionKey}`
+    : `none|${optionKey}`;
+  if (selectedDeviceRenderKey !== nextKey) {
+    if (dirty(el.selectedDeviceSelect)) {
+      return;
+    }
+    selectedDeviceRenderKey = nextKey;
+    if (!selected) {
+      el.selectedDeviceSelect.innerHTML = `<option value="">No route selected</option>`;
+    } else {
+      renderSelect(el.selectedDeviceSelect, state.playbackDevices, selected.selectedDeviceId, !state.canEditTopology, "Choose device...");
+    }
+  }
+  el.selectedDeviceSelect.disabled = selected ? !state.canEditTopology : true;
+}
+
 function renderCalibration() {
   const model = calibrationModel(telemetryState || state);
-  el.calTitle.textContent = `${model.title} — ${model.stage}`;
-  el.calMicHealth.textContent = model.micHealth;
-  el.calGuidance.textContent = model.guidance;
+  setText(el.calTitle, `${model.title} — ${model.stage}`);
+  setText(el.calMicHealth, model.micHealth);
+  setText(el.calGuidance, model.guidance);
   const entries = getCalibrationEntries();
-  el.calAttemptsList.innerHTML = entries.length
-    ? entries.map((entry) => `<div class="cal-attempt ${entry.tone}"><time>${escapeHtml(entry.time)}</time><span>${escapeHtml(entry.text)}</span></div>`).join("")
-    : `<div class="cal-attempt"><span>No recent calibration attempts yet.</span></div>`;
+  const nextKey = entries.length
+    ? entries.map((entry) => `${entry.time}|${entry.tone}|${entry.text}`).join("\n")
+    : "empty";
+  if (calibrationRenderKey !== nextKey) {
+    calibrationRenderKey = nextKey;
+    el.calAttemptsList.innerHTML = entries.length
+      ? entries.map((entry) => `<div class="cal-attempt ${entry.tone}"><time>${escapeHtml(entry.time)}</time><span>${escapeHtml(entry.text)}</span></div>`).join("")
+      : `<div class="cal-attempt"><span>No recent calibration attempts yet.</span></div>`;
+  }
 }
 
 function renderLogs() {
@@ -691,36 +736,19 @@ function patchTele(frame) {
   }
 
   const mode = frame.isCalibrating ? "calibrating" : frame.isRunning ? "live" : "offline";
-  el.enginePill.className = `engine-pill ${mode}`;
-  el.enginePill.textContent = mode.toUpperCase();
+  setClassName(el.enginePill, `engine-pill ${mode}`);
+  setText(el.enginePill, mode.toUpperCase());
 
   meterFill(el.vuCapture, frame.captureLevel || 0);
   meterFill(el.vuRoom, frame.roomMicLevel || 0);
-  el.vuCapturePct.textContent = Math.round((frame.captureLevel || 0) * 100);
-  el.vuRoomPct.textContent = Math.round((frame.roomMicLevel || 0) * 100);
+  setText(el.vuCapturePct, String(Math.round((frame.captureLevel || 0) * 100)));
+  setText(el.vuRoomPct, String(Math.round((frame.roomMicLevel || 0) * 100)));
 
   for (const teleOut of frame.outputs || []) {
-    const strip = el.channelStrips.querySelector(`[data-slot="${teleOut.slotIndex}"]`);
-    if (!strip) {
+    const nodes = getTelemetryNodes(teleOut.slotIndex);
+    if (!nodes) {
       continue;
     }
-    const meter = strip.querySelector(`[data-meter="${teleOut.slotIndex}"]`);
-    const meterLabel = strip.querySelector(`[data-meter-label="${teleOut.slotIndex}"]`);
-    const delayLed = strip.querySelector(`[data-led-delay="${teleOut.slotIndex}"]`);
-    const syncLed = strip.querySelector(`[data-led-sync="${teleOut.slotIndex}"]`);
-    const rateLed = strip.querySelector(`[data-led-rate="${teleOut.slotIndex}"]`);
-    const volumeReadout = strip.querySelector(`[data-volume-readout="${teleOut.slotIndex}"]`);
-    const status = strip.querySelector(".strip-subtitle");
-    const coherence = strip.querySelector('[data-segments="coherence"]');
-    const confidence = strip.querySelector('[data-segments="confidence"]');
-    const faderFill = strip.querySelector(".fader-fill");
-    const faderCap = strip.querySelector(`[data-fader-cap="${teleOut.slotIndex}"]`);
-    const faderValue = strip.querySelector(`[data-fader-value="${teleOut.slotIndex}"]`);
-    const masterTag = strip.querySelector(".strip-master-tag");
-    const volumeKnob = strip.querySelector('[data-knob-field="volume"]');
-    const delayKnob = strip.querySelector('[data-knob-field="delay"]');
-    const volumeKnobReadout = strip.querySelector('[data-knob-readout="volume"]');
-    const delayKnobReadout = strip.querySelector('[data-knob-readout="delay"]');
     // volumePercent is NOT in OutputTelemetryState (only appliedVolumePercent is).
     // Using route.volumePercent (configured value from state) keeps patchTele and
     // renderStrips() in agreement, eliminating fader/knob/LED flicker.
@@ -728,72 +756,139 @@ function patchTele(frame) {
     const liveVolume = Math.round(route?.volumePercent ?? teleOut.appliedVolumePercent ?? 0);
     const liveDelay = Math.round(teleOut.delayMilliseconds || 0);
 
-    if (meter) {
-      setMeterPercent(meter, routeMeterPct(teleOut.meterLevel));
+    if (nodes.meter) {
+      setMeterPercent(nodes.meter, routeMeterPct(teleOut.meterLevel));
     }
-    if (meterLabel) {
-      meterLabel.textContent = routeMeterLabel(teleOut.meterLevel);
+    if (nodes.meterLabel) {
+      setText(nodes.meterLabel, routeMeterLabel(teleOut.meterLevel));
     }
-    if (delayLed) {
-      delayLed.innerHTML = `${Math.round(teleOut.delayMilliseconds || 0)}<small>ms</small>`;
+    if (nodes.delayLed) {
+      setText(nodes.delayLed.firstChild, String(Math.round(teleOut.delayMilliseconds || 0)));
     }
-    if (syncLed) {
-      syncLed.innerHTML = `${Math.round((teleOut.syncConfidence || 0) * 100)}<small>%</small>`;
+    if (nodes.syncLed) {
+      setText(nodes.syncLed.firstChild, String(Math.round((teleOut.syncConfidence || 0) * 100)));
     }
-    if (rateLed) {
-      rateLed.innerHTML = `${Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1)}<small>ms</small>`;
+    if (nodes.rateLed) {
+      setText(nodes.rateLed.firstChild, Math.abs((Number(teleOut.playbackRateRatio || 1) - 1) * 1000).toFixed(1));
     }
-    if (volumeReadout) {
-      volumeReadout.textContent = `${liveVolume}%`;
+    if (nodes.volumeReadout) {
+      setText(nodes.volumeReadout, `${liveVolume}%`);
     }
-    if (status) {
-      status.textContent = teleOut.statusText || "Idle";
+    if (nodes.status) {
+      setText(nodes.status, teleOut.statusText || "Idle");
     }
-    if (coherence) {
-      coherence.innerHTML = renderSegments(routeMeterPct(teleOut.meterLevel), channelColor(teleOut.slotIndex));
+    if (nodes.coherence) {
+      patchSegments(nodes.coherence, routeMeterPct(teleOut.meterLevel), channelColor(teleOut.slotIndex));
     }
-    if (confidence) {
-      confidence.innerHTML = renderSegments(Math.round((teleOut.syncConfidence || 0) * 100), channelColor(teleOut.slotIndex));
+    if (nodes.confidence) {
+      patchSegments(nodes.confidence, Math.round((teleOut.syncConfidence || 0) * 100), channelColor(teleOut.slotIndex));
     }
-    if (faderFill) {
-      faderFill.style.height = `${liveVolume}%`;
+    if (nodes.faderFill) {
+      setStyle(nodes.faderFill, "height", `${liveVolume}%`);
     }
-    if (faderCap) {
-      faderCap.style.top = `${faderCapTop(liveVolume)}px`;
+    if (nodes.faderCap) {
+      setStyle(nodes.faderCap, "top", `${faderCapTop(liveVolume)}px`);
     }
-    if (faderValue) {
-      faderValue.textContent = `${liveVolume}%`;
+    if (nodes.faderValue) {
+      setText(nodes.faderValue, `${liveVolume}%`);
     }
-    if (volumeKnob) {
-      volumeKnob.style.setProperty("--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
+    if (nodes.volumeKnob) {
+      setStyle(nodes.volumeKnob, "--knob-angle", `${knobAngle(liveVolume, 100)}deg`);
     }
-    if (delayKnob) {
-      delayKnob.style.setProperty("--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
+    if (nodes.delayKnob) {
+      setStyle(nodes.delayKnob, "--knob-angle", `${knobAngle(liveDelay, 2000)}deg`);
     }
-    if (volumeKnobReadout) {
-      volumeKnobReadout.textContent = `${liveVolume}%`;
+    if (nodes.volumeKnobReadout) {
+      setText(nodes.volumeKnobReadout, `${liveVolume}%`);
     }
-    if (delayKnobReadout) {
-      delayKnobReadout.textContent = `${liveDelay} ms`;
+    if (nodes.delayKnobReadout) {
+      setText(nodes.delayKnobReadout, `${liveDelay} ms`);
     }
-    if (masterTag) {
+    if (nodes.masterTag) {
       // isTimingMaster is NOT in OutputTelemetryState — always read from state.
       // syncLockState IS in telemetry but as an integer enum (e.g. 0 for Disabled)
       // while the REST state returns it as a string ("Disabled"). The integer is falsy
       // so teleOut.syncLockState || "Manual" would incorrectly show "Manual" every tick.
       // Use route (state-sourced) for both fields to stay consistent with renderStrip().
       const isMaster = !!route?.isTimingMaster;
-      masterTag.textContent = isMaster ? "Master" : route?.syncLockState || "Manual";
-      masterTag.classList.toggle("is-active", isMaster);
+      setText(nodes.masterTag, isMaster ? "Master" : route?.syncLockState || "Manual");
+      nodes.masterTag.classList.toggle("is-active", isMaster);
     }
   }
 
-  el.sessionStatus.textContent = frame.sessionStatusMessage || state.sessionStatusMessage || "Ready";
-  el.captureStatus.textContent = frame.captureStatusText || state.captureStatusText || "Idle";
-  el.calibrationStatus.textContent = frame.calibrationStatusMessage || state.calibrationStatusMessage || "Idle";
+  setText(el.sessionStatus, frame.sessionStatusMessage || state.sessionStatusMessage || "Ready");
+  setText(el.captureStatus, frame.captureStatusText || state.captureStatusText || "Idle");
+  setText(el.calibrationStatus, frame.calibrationStatusMessage || state.calibrationStatusMessage || "Idle");
 
   renderCalibration();
-  renderSelectedPanel();
+  patchSelectedTelemetry();
+}
+
+function getTelemetryNodes(slotIndex) {
+  if (telemetryNodeCache.has(slotIndex)) {
+    return telemetryNodeCache.get(slotIndex);
+  }
+
+  const strip = el.channelStrips.querySelector(`[data-slot="${slotIndex}"]`);
+  if (!strip) {
+    telemetryNodeCache.set(slotIndex, null);
+    return null;
+  }
+
+  const nodes = {
+    meter: strip.querySelector(`[data-meter="${slotIndex}"]`),
+    meterLabel: strip.querySelector(`[data-meter-label="${slotIndex}"]`),
+    delayLed: strip.querySelector(`[data-led-delay="${slotIndex}"]`),
+    syncLed: strip.querySelector(`[data-led-sync="${slotIndex}"]`),
+    rateLed: strip.querySelector(`[data-led-rate="${slotIndex}"]`),
+    volumeReadout: strip.querySelector(`[data-volume-readout="${slotIndex}"]`),
+    status: strip.querySelector(".strip-subtitle"),
+    coherence: strip.querySelector('[data-segments="coherence"]'),
+    confidence: strip.querySelector('[data-segments="confidence"]'),
+    faderFill: strip.querySelector(".fader-fill"),
+    faderCap: strip.querySelector(`[data-fader-cap="${slotIndex}"]`),
+    faderValue: strip.querySelector(`[data-fader-value="${slotIndex}"]`),
+    masterTag: strip.querySelector(".strip-master-tag"),
+    volumeKnob: strip.querySelector('[data-knob-field="volume"]'),
+    delayKnob: strip.querySelector('[data-knob-field="delay"]'),
+    volumeKnobReadout: strip.querySelector('[data-knob-readout="volume"]'),
+    delayKnobReadout: strip.querySelector('[data-knob-readout="delay"]')
+  };
+  telemetryNodeCache.set(slotIndex, nodes);
+  return nodes;
+}
+
+function patchSelectedTelemetry() {
+  const selected = findRoute(selectedSlot) || state.outputs?.[0] || null;
+  if (!selected) {
+    return;
+  }
+  const color = channelColor(selected.slotIndex);
+  const latency = Math.max(0, Number(selected.estimatedArrivalMilliseconds || 0));
+  const buffer = Math.max(0, Number(selected.bufferedMilliseconds || 0));
+  const confidence = Math.round((selected.syncConfidence || 0) * 100);
+  const rate = Number(selected.playbackRateRatio || 1);
+
+  setText(el.selectedChannelStatus, selected.syncLockState || "Manual");
+  setStyle(el.selectedChannelStatus, "color", color);
+  setText(el.selectedChannelDevice, `${selected.statusText || "Idle"} · ${selected.syncSummary || "Manual"}`);
+  setRange(el.selectedVolumeRange, selected.volumePercent);
+  setRange(el.selectedDelayRange, selected.delayMilliseconds);
+  if (document.activeElement !== el.selectedDelayNumber) {
+    el.selectedDelayNumber.value = Math.round(selected.delayMilliseconds);
+  }
+  setText(el.selectedVolumeValue, `${Math.round(selected.volumePercent)}%`);
+  setText(el.selectedDelayValue, `${Math.round(selected.delayMilliseconds)} ms`);
+  setText(el.selectedDelayFoot, `Effective ${Math.round(selected.effectiveDelayMilliseconds || selected.delayMilliseconds)} ms`);
+  setText(el.selectedLatencyValue, `${latency.toFixed(1)} ms`);
+  setText(el.selectedBufferValue, `${Math.round(buffer)} ms`);
+  setText(el.selectedConfidenceValue, `${confidence}%`);
+  setText(el.selectedRateValue, `${rate.toFixed(4)}x`);
+
+  meterFill(el.selectedLatencyMeter, clamp(latency / 500, 0, 1));
+  meterFill(el.selectedBufferMeter, clamp(buffer / 500, 0, 1));
+  meterFill(el.selectedConfidenceMeter, clamp(confidence / 100, 0, 1));
+  meterFill(el.selectedRateMeter, clamp(Math.abs(rate - 1) * 12, 0, 1));
 }
 
 function handleChInput(event) {
@@ -1386,6 +1481,25 @@ function setRange(input, value) {
   }
 }
 
+function setText(node, value) {
+  if (node && node.textContent !== value) {
+    node.textContent = value;
+  }
+}
+
+function setClassName(node, value) {
+  if (node && node.className !== value) {
+    node.className = value;
+  }
+}
+
+function setStyle(node, property, value) {
+  if (!node || node.style.getPropertyValue(property) === value) {
+    return;
+  }
+  node.style.setProperty(property, value);
+}
+
 function dirty(input) {
   return document.activeElement === input || settingsTimer !== null;
 }
@@ -1677,6 +1791,26 @@ function routeMeterPct(value) {
 
 function routeMeterLabel(value) {
   return `${routeMeterPct(value)}%`;
+}
+
+function patchSegments(element, percent, color) {
+  const nextPercent = String(Math.max(0, Math.min(100, Math.round(Number(percent || 0)))));
+  const nextColor = String(color || "");
+  if (element.dataset.percent === nextPercent && element.dataset.color === nextColor) {
+    return;
+  }
+
+  element.dataset.percent = nextPercent;
+  element.dataset.color = nextColor;
+  const lit = Math.max(0, Math.min(6, Math.round(Number(nextPercent) / (100 / 6))));
+  const segments = element.children;
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const active = index < lit;
+    segment.classList.toggle("is-active", active);
+    segment.style.background = active ? nextColor : "";
+    segment.style.boxShadow = active ? `0 0 8px ${nextColor}55` : "";
+  }
 }
 
 function renderSegments(percent, color) {

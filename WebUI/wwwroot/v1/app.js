@@ -2,7 +2,7 @@ const POLL_INTERVAL_MS = 2000;
 const SAFETY_CHECK_INTERVAL_MS = 1000;
 const STATE_STALE_REFRESH_MS = 4000;
 const TELEMETRY_STALE_RECONNECT_MS = 2500;
-const TELEMETRY_POLL_MS = 90;
+const TELEMETRY_POLL_MS = 250;
 const INTERACTION_PAUSE_MS = 900;
 const SETTINGS_DEBOUNCE_MS = 220;
 const ROUTE_DEBOUNCE_MS = 140;
@@ -20,6 +20,9 @@ let eventStream = null;
 let telemetryStream = null;
 let fallbackPollTimer = null;
 let telemetryPollTimer = null;
+let pendingTelemetryFrame = null;
+let telemetryPatchFrame = 0;
+let calibrationAttemptsRenderKey = "";
 let routeCopyBuffer = null;
 let delayHoldState = null;
 let routeBoardHovered = false;
@@ -583,14 +586,18 @@ function renderCalibrationAttempts() {
   elements.calibrationWatchAttemptsMeta.textContent = entries.length
     ? `${entries.length} recent events`
     : "No recent attempts";
-  elements.calibrationWatchAttempts.innerHTML = entries.length
-    ? entries.map((entry) => `
-        <article class="calibration-attempt ${entry.tone}">
-          <span class="calibration-attempt-time">${escapeHtml(entry.time)}</span>
-          <span class="calibration-attempt-text">${escapeHtml(entry.text)}</span>
-        </article>
-      `).join("")
-    : `<p class="subtle">Attempt-by-attempt calibration feedback will appear here.</p>`;
+  const nextKey = entries.length ? entries.map((entry) => `${entry.time}|${entry.tone}|${entry.text}`).join("\n") : "empty";
+  if (calibrationAttemptsRenderKey !== nextKey) {
+    calibrationAttemptsRenderKey = nextKey;
+    elements.calibrationWatchAttempts.innerHTML = entries.length
+      ? entries.map((entry) => `
+          <article class="calibration-attempt ${entry.tone}">
+            <span class="calibration-attempt-time">${escapeHtml(entry.time)}</span>
+            <span class="calibration-attempt-text">${escapeHtml(entry.text)}</span>
+          </article>
+        `).join("")
+      : `<p class="subtle">Attempt-by-attempt calibration feedback will appear here.</p>`;
+  }
 }
 
 function renderSummary() {
@@ -1416,7 +1423,21 @@ function setTelemetry(nextTelemetry) {
 
   telemetryState = nextTelemetry;
   mergeTelemetryIntoState(nextTelemetry);
-  patchTelemetryFrame(nextTelemetry);
+  scheduleTelemetryPatch(nextTelemetry);
+}
+
+function scheduleTelemetryPatch(frame) {
+  pendingTelemetryFrame = frame;
+  if (telemetryPatchFrame) {
+    return;
+  }
+
+  telemetryPatchFrame = requestAnimationFrame(() => {
+    telemetryPatchFrame = 0;
+    const frameToPatch = pendingTelemetryFrame;
+    pendingTelemetryFrame = null;
+    patchTelemetryFrame(frameToPatch);
+  });
 }
 
 function markInteraction() {

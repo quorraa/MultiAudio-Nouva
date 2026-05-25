@@ -14,7 +14,7 @@ const POLL_MS   = 2000;
 const SAFETY_MS = 1000;
 const STALE_MS  = 4000;
 const TELE_STALE= 2500;
-const TELE_POLL = 90;
+const TELE_POLL = 250;
 const SET_DEB   = 220;
 const RETRY_MS  = 1600;
 
@@ -26,6 +26,9 @@ let evStream     = null;
 let teleStream   = null;
 let fbTimer      = null;
 let telePollTimer= null;
+let pendingTeleFrame = null;
+let telePatchFrame = 0;
+let calRenderKey = '';
 let setTimer     = null;
 let calibFlight  = false;
 let lastStateAt  = 0;
@@ -255,7 +258,18 @@ function setTele(next) {
   if (teleState && (next.telemetryRevision || 0) < (teleState.telemetryRevision || 0)) return;
   teleState = next;
   mergeTele(next);
-  patchTele(next);
+  scheduleTelePatch(next);
+}
+
+function scheduleTelePatch(frame) {
+  pendingTeleFrame = frame;
+  if (telePatchFrame) return;
+  telePatchFrame = requestAnimationFrame(() => {
+    telePatchFrame = 0;
+    const frameToPatch = pendingTeleFrame;
+    pendingTeleFrame = null;
+    patchTele(frameToPatch);
+  });
 }
 
 function mergeTele(f) {
@@ -535,9 +549,13 @@ function renderCal() {
   E.calHealthBadge.textContent = health;
 
   const entries = getCalEntries();
-  E.calAttempts.innerHTML = entries.length
-    ? entries.map(e => `<div class="cal-entry ${e.tone}"><time>${esc(e.time)}</time><span>${esc(e.text)}</span></div>`).join('')
-    : '';
+  const nextKey = entries.length ? entries.map(e => `${e.time}|${e.tone}|${e.text}`).join('\n') : 'empty';
+  if (calRenderKey !== nextKey) {
+    calRenderKey = nextKey;
+    E.calAttempts.innerHTML = entries.length
+      ? entries.map(e => `<div class="cal-entry ${e.tone}"><time>${esc(e.time)}</time><span>${esc(e.text)}</span></div>`).join('')
+      : '';
+  }
 }
 
 /* ─── LOG ─── */
