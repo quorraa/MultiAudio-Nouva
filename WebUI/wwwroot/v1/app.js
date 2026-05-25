@@ -44,6 +44,7 @@ const elements = {
   startBtn: document.getElementById("startBtn"),
   stopBtn: document.getElementById("stopBtn"),
   calibrateBtn: document.getElementById("calibrateBtn"),
+  syncTickBtn: document.getElementById("syncTickBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
   addOutputBtn: document.getElementById("addOutputBtn"),
   copyLogsBtn: document.getElementById("copyLogsBtn"),
@@ -138,6 +139,7 @@ function bindStaticEvents() {
   elements.compactDockStartBtn.addEventListener("click", start);
   elements.compactDockStopBtn.addEventListener("click", stop);
   elements.calibrateBtn.addEventListener("click", handleCalibrationButtonClick);
+  elements.syncTickBtn?.addEventListener("click", () => mutate(() => api("/api/sync-tick/toggle", { method: "POST" })));
   elements.refreshBtn.addEventListener("click", () => mutate(() => api("/api/refresh-devices", { method: "POST" })));
   elements.addOutputBtn.addEventListener("click", () => mutate(() => api("/api/outputs", { method: "POST" })));
   elements.copyLogsBtn.addEventListener("click", copyLogsToClipboard);
@@ -265,8 +267,10 @@ function connectTelemetryStream() {
   });
   telemetryStream.onopen = () => {
     lastTelemetrySignalAt = Date.now();
+    stopTelemetryPolling();
   };
   telemetryStream.onerror = () => {
+    startTelemetryPolling();
     window.setTimeout(() => {
       if (telemetryStream && telemetryStream.readyState === EventSource.CLOSED) {
         connectTelemetryStream();
@@ -348,6 +352,7 @@ function runSafetyRefresh() {
   }
 
   if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTelemetrySignalAt > TELEMETRY_STALE_RECONNECT_MS) {
+    startTelemetryPolling();
     connectTelemetryStream();
   }
 }
@@ -360,6 +365,15 @@ function startTelemetryPolling() {
   telemetryPollTimer = window.setInterval(() => {
     refreshTelemetry();
   }, TELEMETRY_POLL_MS);
+}
+
+function stopTelemetryPolling() {
+  if (!telemetryPollTimer) {
+    return;
+  }
+
+  window.clearInterval(telemetryPollTimer);
+  telemetryPollTimer = null;
 }
 
 function handleCalibrationButtonClick() {
@@ -500,6 +514,11 @@ function renderGeneralControls() {
   elements.configPath.textContent = state.configPath;
   elements.outputCount.textContent = String(state.outputs.length);
   elements.calibrateBtn.textContent = state.isCalibrating ? "Cancel Calibration" : "Run Calibration";
+  if (elements.syncTickBtn) {
+    elements.syncTickBtn.textContent = state.manualSyncTickEnabled ? "Sync Tick On" : "Sync Tick";
+    elements.syncTickBtn.classList.toggle("active", !!state.manualSyncTickEnabled);
+    elements.syncTickBtn.disabled = !state.canToggleManualSyncTick;
+  }
 
   elements.startBtn.disabled = !state.canStart;
   elements.stopBtn.disabled = !state.canStop;

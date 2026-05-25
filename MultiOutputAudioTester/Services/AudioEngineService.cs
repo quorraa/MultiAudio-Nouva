@@ -17,10 +17,16 @@ public sealed class AudioEngineService : IAsyncDisposable
     private Task? _pumpTask;
     private Task? _monitorTask;
     private WasapiCapture? _capture;
+    private MMDevice? _captureDevice;
     private BufferedWaveProvider? _captureBuffer;
     private ISampleProvider? _normalizedProvider;
     private bool _isRunning;
     private bool _coordinatedRebufferActive;
+    private bool _manualSyncTickEnabled;
+    private float[] _manualSyncMixScratch = Array.Empty<float>();
+    private long _manualSyncTickFrame;
+    private int _manualSyncTickRemainingFrames;
+    private uint _manualSyncNoiseState = 0x6D2B79F5u;
 
     public AudioEngineService(AppLogger logger)
     {
@@ -140,6 +146,7 @@ public sealed class AudioEngineService : IAsyncDisposable
         Task? pumpTask;
         Task? monitorTask;
         WasapiCapture? capture;
+        MMDevice? captureDevice;
 
         lock (_sync)
         {
@@ -151,6 +158,8 @@ public sealed class AudioEngineService : IAsyncDisposable
             _monitorTask = null;
             capture = _capture;
             _capture = null;
+            captureDevice = _captureDevice;
+            _captureDevice = null;
             _captureBuffer = null;
             _normalizedProvider = null;
             _isRunning = false;
@@ -175,6 +184,8 @@ public sealed class AudioEngineService : IAsyncDisposable
 
             capture.Dispose();
         }
+
+        captureDevice?.Dispose();
 
         if (pumpTask is not null)
         {
@@ -232,6 +243,7 @@ public sealed class AudioEngineService : IAsyncDisposable
 
         _outputPipelines.Clear();
         CaptureLevelChanged?.Invoke(this, 0);
+        ctsToCancel?.Dispose();
     }
 
     public void UpdateOutputSettings(int slotIndex, double volumePercent, int delayMilliseconds)
@@ -264,6 +276,18 @@ public sealed class AudioEngineService : IAsyncDisposable
         }
     }
 
+    public void UpdateManualSyncTick(bool enabled)
+    {
+        lock (_sync)
+        {
+            _manualSyncTickEnabled = enabled;
+            if (!enabled)
+            {
+                _manualSyncTickRemainingFrames = 0;
+            }
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
@@ -274,6 +298,7 @@ public sealed class AudioEngineService : IAsyncDisposable
 
     private void InitializeCapture(MMDevice inputDevice)
     {
+        _captureDevice = inputDevice;
         _capture = new WasapiCapture(inputDevice);
         _capture.DataAvailable += OnCaptureDataAvailable;
         _capture.RecordingStopped += OnCaptureStopped;
@@ -380,7 +405,8 @@ public sealed class AudioEngineService : IAsyncDisposable
 
     private void DispatchSamples(float[] sampleBuffer, int samplesRead, byte[] byteBuffer)
     {
-        Buffer.BlockCopy(sampleBuffer, 0, byteBuffer, 0, samplesRead * sizeof(float));
+        var dispatchBuffer = ApplyManualSyncTick(sampleBuffer, samplesRead);
+        Buffer.BlockCopy(dispatchBuffer, 0, byteBuffer, 0, samplesRead * sizeof(float));
 
         foreach (var pipeline in _outputPipelines)
         {
@@ -398,6 +424,71 @@ public sealed class AudioEngineService : IAsyncDisposable
         }
 
         CaptureLevelChanged?.Invoke(this, peak);
+    }
+
+    private float[] ApplyManualSyncTick(float[] sourceBuffer, int samplesRead)
+    {
+        bool enabled;
+        lock (_sync)
+        {
+            enabled = _manualSyncTickEnabled;
+        }
+
+        if (!enabled || samplesRead <= 0)
+        {
+            return sourceBuffer;
+        }
+
+        if (_manualSyncMixScratch.Length < samplesRead)
+        {
+            _manualSyncMixScratch = new float[samplesRead];
+        }
+
+        Array.Copy(sourceBuffer, _manualSyncMixScratch, samplesRead);
+
+        const int tickIntervalFrames = 48000;
+        const int tickDurationFrames = 1800;
+        const double baseAmplitude = 0.18;
+        var framesRead = samplesRead / _internalFormat.Channels;
+
+        for (var frame = 0; frame < framesRead; frame++)
+        {
+            if (_manualSyncTickRemainingFrames <= 0 && _manualSyncTickFrame % tickIntervalFrames == 0)
+            {
+                _manualSyncTickRemainingFrames = tickDurationFrames;
+            }
+
+            if (_manualSyncTickRemainingFrames > 0)
+            {
+                var age = tickDurationFrames - _manualSyncTickRemainingFrames;
+                var envelope = Math.Exp(-age / 360.0);
+                var noise = NextSignedNoise();
+                var metallic = Math.Sin((_manualSyncTickFrame * Math.PI * 2 * 7900.0) / _internalFormat.SampleRate)
+                    + (0.45 * Math.Sin((_manualSyncTickFrame * Math.PI * 2 * 11300.0) / _internalFormat.SampleRate));
+                var tick = (float)((noise * 0.72 + metallic * 0.28) * envelope * baseAmplitude);
+
+                var sampleIndex = frame * _internalFormat.Channels;
+                for (var channel = 0; channel < _internalFormat.Channels; channel++)
+                {
+                    var index = sampleIndex + channel;
+                    _manualSyncMixScratch[index] = Math.Clamp(_manualSyncMixScratch[index] + tick, -1f, 1f);
+                }
+
+                _manualSyncTickRemainingFrames--;
+            }
+
+            _manualSyncTickFrame++;
+        }
+
+        return _manualSyncMixScratch;
+    }
+
+    private float NextSignedNoise()
+    {
+        _manualSyncNoiseState ^= _manualSyncNoiseState << 13;
+        _manualSyncNoiseState ^= _manualSyncNoiseState >> 17;
+        _manualSyncNoiseState ^= _manualSyncNoiseState << 5;
+        return ((_manualSyncNoiseState & 0xFFFF) / 32767.5f) - 1f;
     }
 
     private async Task MonitorOutputsAsync(CancellationToken cancellationToken)

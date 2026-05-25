@@ -12,8 +12,99 @@ $project = Join-Path $repoRoot "WebUI\WebUI.csproj"
 $publishDir = Join-Path $repoRoot "dist\portable\$Runtime\app"
 $zipPath = Join-Path $repoRoot "dist\portable\MultiAudioNouva-$Version-$Runtime-portable.zip"
 
+function Stop-PortableAppProcesses {
+    param(
+        [string]$TargetDirectory
+    )
+
+    $resolvedTarget = [System.IO.Path]::GetFullPath($TargetDirectory).TrimEnd('\')
+    $currentProcessId = $PID
+
+    $processes = Get-CimInstance Win32_Process | Where-Object {
+        if ($_.ProcessId -eq $currentProcessId) {
+            return $false
+        }
+
+        $executablePath = $_.ExecutablePath
+        $commandLine = $_.CommandLine
+        $isPublishedApp =
+            $executablePath -and
+            ([System.IO.Path]::GetFullPath($executablePath).StartsWith($resolvedTarget, [System.StringComparison]::OrdinalIgnoreCase))
+
+        $usesPublishDir =
+            $commandLine -and
+            ($commandLine.IndexOf($resolvedTarget, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+             $commandLine.IndexOf($TargetDirectory, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+
+        $isPublishedApp -or $usesPublishDir
+    }
+
+    foreach ($process in $processes) {
+        Write-Host "Stopping process using portable app folder: $($process.Name) ($($process.ProcessId))"
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Remove-DirectoryWithRetry {
+    param(
+        [string]$Path
+    )
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    Stop-PortableAppProcesses -TargetDirectory $Path
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Remove-Item -Recurse -Force $Path
+            return
+        }
+        catch {
+            $lastError = $_
+            Start-Sleep -Milliseconds (250 * $attempt)
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+        }
+    }
+
+    throw "Failed to remove '$Path' after stopping matching processes. Last error: $($lastError.Exception.Message)"
+}
+
+function Clear-DirectoryContentsWithRetry {
+    param(
+        [string]$Path
+    )
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    Stop-PortableAppProcesses -TargetDirectory $Path
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Get-ChildItem -LiteralPath $Path -Force | ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+            }
+            return
+        }
+        catch {
+            $lastError = $_
+            Start-Sleep -Milliseconds (250 * $attempt)
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+        }
+    }
+
+    throw "Failed to clear '$Path' after stopping matching processes. Last error: $($lastError.Exception.Message)"
+}
+
 if (Test-Path $publishDir) {
-    Remove-Item -Recurse -Force $publishDir
+    Clear-DirectoryContentsWithRetry -Path $publishDir
 }
 
 New-Item -ItemType Directory -Force -Path $publishDir | Out-Null

@@ -28,6 +28,7 @@ const el = {
   startBtn: $("startBtn"),
   stopBtn: $("stopBtn"),
   calibrateBtn: $("calibrateBtn"),
+  syncTickBtn: $("syncTickBtn"),
   refreshBtn: $("refreshBtn"),
   openVariantRouteBtn: $("openVariantRouteBtn"),
   variantRouteSelect: $("variantRouteSelect"),
@@ -120,6 +121,7 @@ function bindEvents() {
   el.stopBtn.addEventListener("click", () => mutate(() => api("/api/stop", { method: "POST" })));
   el.refreshBtn.addEventListener("click", () => mutate(() => api("/api/refresh-devices", { method: "POST" })));
   el.calibrateBtn.addEventListener("click", handleCalibrationButton);
+  el.syncTickBtn?.addEventListener("click", () => mutate(() => api("/api/sync-tick/toggle", { method: "POST" })));
   el.copyLogsBtn.addEventListener("click", copyLogs);
   el.openConfigFolderBtn.addEventListener("click", () => mutate(() => api("/api/open-config-folder", { method: "POST" })));
   el.openDeviceProfileBtn.addEventListener("click", openDeviceProfileEditor);
@@ -217,8 +219,10 @@ function connectTelemetry() {
   });
   teleStream.onopen = () => {
     lastTeleAt = Date.now();
+    stopTelemetryPolling();
   };
   teleStream.onerror = () => {
+    startTelemetryPolling();
     window.setTimeout(() => {
       if (teleStream?.readyState === EventSource.CLOSED) {
         connectTelemetry();
@@ -249,11 +253,20 @@ function startTelemetryPolling() {
   telePollTimer = window.setInterval(() => refreshTelemetry(), TELE_POLL_MS);
 }
 
+function stopTelemetryPolling() {
+  if (!telePollTimer) {
+    return;
+  }
+  window.clearInterval(telePollTimer);
+  telePollTimer = null;
+}
+
 function runSafetyChecks() {
   if (Date.now() - lastStateAt > STALE_MS) {
     refreshState(true);
   }
   if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTeleAt > TELE_STALE_MS) {
+    startTelemetryPolling();
     connectTelemetry();
     refreshTelemetry(true);
   }
@@ -479,6 +492,11 @@ function renderControls() {
   el.refreshBtn.disabled = !state.canRefreshDevices;
   el.calibrateBtn.disabled = calibrationInFlight || (!state.canRunCalibration && !state.isCalibrating);
   el.calibrateBtn.textContent = state.isCalibrating ? "Cancel calibration" : "Calibrate";
+  if (el.syncTickBtn) {
+    el.syncTickBtn.disabled = !state.canToggleManualSyncTick;
+    el.syncTickBtn.textContent = state.manualSyncTickEnabled ? "Sync Tick On" : "Sync Tick";
+    el.syncTickBtn.classList.toggle("active", !!state.manualSyncTickEnabled);
+  }
 
   renderSelect(el.inputSelect, state.inputDevices || [], state.selectedInputDeviceId, !state.canEditTopology);
   renderSelect(el.calibrationSelect, state.inputDevices || [], state.selectedCalibrationInputDeviceId, state.isCalibrating);

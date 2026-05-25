@@ -44,6 +44,7 @@ const E = {
   startBtn:     $('startBtn'),
   stopBtn:      $('stopBtn'),
   calibBtn:     $('calibBtn'),
+  syncTickBtn:  $('syncTickBtn'),
   refreshBtn:   $('refreshBtn'),
   addOutputBtn: $('addOutputBtn'),
   masterRange:  $('masterVolRange'),
@@ -118,6 +119,7 @@ function bindEvents() {
   E.startBtn.onclick    = () => mutate(() => api('/api/start',           { method:'POST' }));
   E.stopBtn.onclick     = () => mutate(() => api('/api/stop',            { method:'POST' }));
   E.calibBtn.onclick    = handleCalibrate;
+  E.syncTickBtn.onclick = () => mutate(() => api('/api/sync-tick/toggle', { method:'POST' }));
   E.refreshBtn.onclick  = () => mutate(() => api('/api/refresh-devices', { method:'POST' }));
   E.addOutputBtn.onclick = () => mutate(() => api('/api/outputs',        { method:'POST' }));
   E.copyLogsBtn.onclick = copyLogs;
@@ -173,13 +175,14 @@ function connectTele() {
     try { lastTeleAt = Date.now(); setTele(normSse(JSON.parse(e.data))); }
     catch {}
   });
-  teleStream.onopen  = () => { lastTeleAt = Date.now(); };
-  teleStream.onerror = () => { setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
+  teleStream.onopen = () => { lastTeleAt = Date.now(); stopTelePoll(); };
+  teleStream.onerror = () => { startTelePoll(); setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
 }
 
 function startFb() { if (fbTimer) return; fbTimer = setInterval(() => refreshState(), POLL_MS); }
 function stopFb()  { if (!fbTimer) return; clearInterval(fbTimer); fbTimer = null; }
 function startTelePoll() { if (telePollTimer) return; telePollTimer = setInterval(() => refreshTele(), TELE_POLL); }
+function stopTelePoll() { if (!telePollTimer) return; clearInterval(telePollTimer); telePollTimer = null; }
 
 async function refreshState(force) {
   if (pollFlight) return;
@@ -313,6 +316,9 @@ function renderControls() {
   E.addOutputBtn.disabled = !state.canAddOutput;
   E.calibBtn.textContent = state.isCalibrating ? '⌖ Cancel' : '⌖ Calibrate';
   E.calibBtn.disabled    = calibFlight || (!state.canRunCalibration && !state.isCalibrating);
+  E.syncTickBtn.textContent = state.manualSyncTickEnabled ? 'Tick On' : 'Tick';
+  E.syncTickBtn.disabled = !state.canToggleManualSyncTick;
+  E.syncTickBtn.classList.toggle('active', !!state.manualSyncTickEnabled);
 
   if (!isDirty(E.masterRange)) E.masterRange.value = state.masterVolumePercent;
   E.masterVal.textContent = Math.round(+E.masterRange.value);

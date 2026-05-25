@@ -160,8 +160,8 @@ app.MapGet("/api/events", async (HttpContext context, AudioControlService servic
     context.Response.Headers.CacheControl = "no-cache";
     context.Response.Headers.Connection = "keep-alive";
 
-    var reader = service.Subscribe(context.RequestAborted);
-    await foreach (var snapshot in reader.ReadAllAsync(context.RequestAborted))
+    using var subscription = service.Subscribe(context.RequestAborted);
+    await foreach (var snapshot in subscription.Reader.ReadAllAsync(context.RequestAborted))
     {
         var payload = JsonSerializer.Serialize(snapshot);
         await context.Response.WriteAsync($"event: state\ndata: {payload}\n\n", context.RequestAborted);
@@ -174,8 +174,8 @@ app.MapGet("/api/telemetry", async (HttpContext context, AudioControlService ser
     context.Response.Headers.CacheControl = "no-cache";
     context.Response.Headers.Connection = "keep-alive";
 
-    var reader = service.SubscribeTelemetry(context.RequestAborted);
-    await foreach (var snapshot in reader.ReadAllAsync(context.RequestAborted))
+    using var subscription = service.SubscribeTelemetry(context.RequestAborted);
+    await foreach (var snapshot in subscription.Reader.ReadAllAsync(context.RequestAborted))
     {
         var payload = JsonSerializer.Serialize(snapshot);
         await context.Response.WriteAsync($"event: telemetry\ndata: {payload}\n\n", context.RequestAborted);
@@ -192,6 +192,7 @@ app.MapPost("/api/outputs", (AudioControlService service) => ExecuteAsync(servic
 app.MapPost("/api/outputs/{slotIndex:int}/mute", (AudioControlService service, int slotIndex) => ExecuteAsync(() => service.ToggleMuteAsync(slotIndex)));
 app.MapPost("/api/outputs/{slotIndex:int}/solo", (AudioControlService service, int slotIndex) => ExecuteAsync(() => service.ToggleSoloAsync(slotIndex)));
 app.MapPost("/api/outputs/{slotIndex:int}/ping", (AudioControlService service, int slotIndex) => ExecuteAsync(() => service.PingOutputAsync(slotIndex)));
+app.MapPost("/api/sync-tick/toggle", (AudioControlService service) => ExecuteAsync(service.ToggleManualSyncTickAsync));
 app.MapDelete("/api/outputs/{slotIndex:int}", (AudioControlService service, int slotIndex) => ExecuteAsync(() => service.RemoveOutputAsync(slotIndex)));
 app.MapPut("/api/settings", (AudioControlService service, MainSettingsUpdateRequest request) => ExecuteAsync(() => service.UpdateSettingsAsync(request)));
 app.MapPut("/api/outputs/{slotIndex:int}", (AudioControlService service, int slotIndex, OutputUpdateRequest request) => ExecuteAsync(() => service.UpdateOutputAsync(slotIndex, request)));

@@ -188,8 +188,8 @@ public sealed class CalibrationService
         MMDevice outputDevice,
         CancellationToken cancellationToken)
     {
-        using var capturedBytes = new MemoryStream();
         using var capture = new WasapiCapture(inputDevice);
+        using var capturedBytes = new MemoryStream(EstimateCaptureByteCapacity(capture.WaveFormat));
         var stopTcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         capture.DataAvailable += (_, args) => capturedBytes.Write(args.Buffer, 0, args.BytesRecorded);
@@ -216,6 +216,15 @@ public sealed class CalibrationService
         await stopTcs.Task;
 
         return new CalibrationAttemptCapture(capturedBytes.ToArray(), capture.WaveFormat, playStart);
+    }
+
+    private int EstimateCaptureByteCapacity(WaveFormat captureFormat)
+    {
+        var playbackMilliseconds = (int)Math.Ceiling(
+            _signal.StereoSignalBytes.Length * 1000.0 / _playbackFormat.AverageBytesPerSecond);
+        var captureMilliseconds = CaptureWarmupMilliseconds + playbackMilliseconds + PostPlaybackGapMilliseconds + 250;
+        var estimatedBytes = (long)Math.Ceiling(captureFormat.AverageBytesPerSecond * captureMilliseconds / 1000.0);
+        return (int)Math.Clamp(estimatedBytes, 64 * 1024, 16 * 1024 * 1024);
     }
 
     private async Task PlayCalibrationSignalAsync(MMDevice outputDevice, CancellationToken cancellationToken)
@@ -717,7 +726,8 @@ public sealed class CalibrationService
             sampleProvider = new WdlResamplingSampleProvider(sampleProvider, InternalSampleRate);
         }
 
-        var samples = new List<float>();
+        var estimatedSamples = Math.Max(0, recordedBytes.Length * InternalSampleRate / Math.Max(1, sourceFormat.AverageBytesPerSecond));
+        var samples = new List<float>(estimatedSamples);
         var buffer = new float[InternalSampleRate];
         while (true)
         {
@@ -727,7 +737,10 @@ public sealed class CalibrationService
                 break;
             }
 
-            samples.AddRange(buffer.Take(read));
+            for (var index = 0; index < read; index++)
+            {
+                samples.Add(buffer[index]);
+            }
         }
 
         return samples.ToArray();

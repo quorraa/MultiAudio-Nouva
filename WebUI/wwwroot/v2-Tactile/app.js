@@ -44,6 +44,7 @@ const el = {
   startBtn: $("startBtn"),
   stopBtn: $("stopBtn"),
   calibrateBtn: $("calibrateBtn"),
+  syncTickBtn: $("syncTickBtn"),
   refreshBtn: $("refreshBtn"),
   addOutputBtn: $("addOutputBtn"),
   copyLogsBtn: $("copyLogsBtn"),
@@ -130,6 +131,7 @@ function bindEvents() {
   el.refreshBtn.onclick = () => mutate(() => api("/api/refresh-devices", { method: "POST" }));
   el.addOutputBtn.onclick = () => mutate(() => api("/api/outputs", { method: "POST" }));
   el.calibrateBtn.onclick = handleCalibrate;
+  el.syncTickBtn.onclick = () => mutate(() => api("/api/sync-tick/toggle", { method: "POST" }));
   el.copyLogsBtn.onclick = copyLogs;
   el.openConfigFolderBtn.onclick = () => mutate(() => api("/api/open-config-folder", { method: "POST" }));
   el.layoutLockBtn.onclick = toggleLayoutLock;
@@ -255,8 +257,10 @@ function connectTele() {
   });
   teleStream.onopen = () => {
     lastTeleAt = Date.now();
+    stopTelePoll();
   };
   teleStream.onerror = () => {
+    startTelePoll();
     setTimeout(() => {
       if (teleStream?.readyState === 2) {
         connectTele();
@@ -285,6 +289,14 @@ function startTelePoll() {
     return;
   }
   telePollTimer = setInterval(() => refreshTele(), TELE_POLL_MS);
+}
+
+function stopTelePoll() {
+  if (!telePollTimer) {
+    return;
+  }
+  clearInterval(telePollTimer);
+  telePollTimer = null;
 }
 
 async function refreshState(force) {
@@ -331,6 +343,7 @@ function safety() {
     refreshState(true);
   }
   if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTeleAt > TELE_STALE_MS) {
+    startTelePoll();
     connectTele();
   }
 }
@@ -451,6 +464,9 @@ function renderTransport() {
   el.addOutputBtn.disabled = !state.canAddOutput;
   el.calibrateBtn.textContent = state.isCalibrating ? "Cancel" : "Calibrate";
   el.calibrateBtn.disabled = calibInFlight || (!state.canRunCalibration && !state.isCalibrating);
+  el.syncTickBtn.textContent = state.manualSyncTickEnabled ? "Tick On" : "Sync Tick";
+  el.syncTickBtn.disabled = !state.canToggleManualSyncTick;
+  el.syncTickBtn.classList.toggle("active", !!state.manualSyncTickEnabled);
   setRange(el.masterVolRange, state.masterVolumePercent);
   el.masterVolRange.disabled = state.isCalibrating;
   el.masterVolValue.textContent = Math.round(+el.masterVolRange.value);

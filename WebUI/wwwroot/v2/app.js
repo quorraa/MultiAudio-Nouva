@@ -38,7 +38,7 @@ const diagOpen = new Set(jsonStore("v2.diag", []));
 
 const $ = id => document.getElementById(id);
 const el = {
-  startBtn: $("startBtn"), stopBtn: $("stopBtn"), calibrateBtn: $("calibrateBtn"),
+  startBtn: $("startBtn"), stopBtn: $("stopBtn"), calibrateBtn: $("calibrateBtn"), syncTickBtn: $("syncTickBtn"),
   refreshBtn: $("refreshBtn"), addOutputBtn: $("addOutputBtn"),
   copyLogsBtn: $("copyLogsBtn"), enginePill: $("enginePill"),
   inputSelect: $("inputSelect"), calibrationSelect: $("calibrationSelect"),
@@ -103,6 +103,7 @@ function bindEvents() {
   el.refreshBtn.onclick = () => mutate(() => api("/api/refresh-devices", { method: "POST" }));
   el.addOutputBtn.onclick = () => mutate(() => api("/api/outputs", { method: "POST" }));
   el.calibrateBtn.onclick = handleCalibrate;
+  el.syncTickBtn.onclick = () => mutate(() => api("/api/sync-tick/toggle", { method: "POST" }));
   el.copyLogsBtn.onclick = copyLogs;
 
   $("logDrawerToggle").onclick = () => {
@@ -171,13 +172,14 @@ function connectTele() {
   if (teleStream) teleStream.close();
   teleStream = new EventSource("/api/telemetry");
   teleStream.addEventListener("telemetry", e => { try { lastTeleAt = Date.now(); setTelemetry(normalizeSsePayload(JSON.parse(e.data))); } catch {} });
-  teleStream.onopen = () => { lastTeleAt = Date.now(); };
-  teleStream.onerror = () => { setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
+  teleStream.onopen = () => { lastTeleAt = Date.now(); stopTelePoll(); };
+  teleStream.onerror = () => { startTelePoll(); setTimeout(() => { if (teleStream?.readyState === 2) connectTele(); }, RETRY_MS); };
 }
 
 function startFb() { if (fbTimer) return; fbTimer = setInterval(() => refreshState(), POLL_MS); }
 function stopFb() { if (!fbTimer) return; clearInterval(fbTimer); fbTimer = null; }
 function startTelePoll() { if (telePollTimer) return; telePollTimer = setInterval(() => refreshTele(), TELE_POLL_MS); }
+function stopTelePoll() { if (!telePollTimer) return; clearInterval(telePollTimer); telePollTimer = null; }
 
 async function refreshState(force) {
   if (pollInFlight) return;
@@ -199,7 +201,7 @@ async function refreshTele(force) {
 function safety() {
   if (!window.EventSource) return;
   if (Date.now() - lastStateAt > STALE_MS) refreshState(true);
-  if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTeleAt > TELE_STALE_MS) connectTele();
+  if ((state?.isRunning || state?.isCalibrating) && Date.now() - lastTeleAt > TELE_STALE_MS) { startTelePoll(); connectTele(); }
 }
 
 // ===== API =====
@@ -279,6 +281,9 @@ function renderTransport() {
   el.refreshBtn.disabled = !state.canRefreshDevices; el.addOutputBtn.disabled = !state.canAddOutput;
   el.calibrateBtn.title = state.isCalibrating ? "Cancel Calibration" : "Run Calibration";
   el.calibrateBtn.disabled = calibInFlight || (!state.canRunCalibration && !state.isCalibrating);
+  el.syncTickBtn.title = state.manualSyncTickEnabled ? "Disable Sync Tick" : "Enable Sync Tick";
+  el.syncTickBtn.classList.toggle("active", !!state.manualSyncTickEnabled);
+  el.syncTickBtn.disabled = !state.canToggleManualSyncTick;
 }
 
 function renderRack() {

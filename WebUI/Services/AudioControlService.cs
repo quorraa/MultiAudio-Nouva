@@ -67,6 +67,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
     private double _masterVolumePercent = 100;
     private double _markerLevelPercent = 1.6;
     private AutoSyncMode _autoSyncMode = AutoSyncMode.MonitorOnly;
+    private bool _manualSyncTickEnabled;
     private string _captureStatusText = "Idle";
     private string _sessionStatusMessage = "Ready";
     private string _calibrationStatusMessage = "Calibration idle.";
@@ -164,6 +165,8 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
                 CanAddOutput = !_isRunning && !_isCalibrating,
                 CanRunCalibration = !_isCalibrating,
                 CanEditTopology = !_isRunning && !_isCalibrating,
+                CanToggleManualSyncTick = _isRunning && !_isCalibrating,
+                ManualSyncTickEnabled = _manualSyncTickEnabled,
                 SelectedInputDeviceId = _selectedInputDeviceId,
                 SelectedCalibrationInputDeviceId = _selectedCalibrationInputDeviceId,
                 UseTestTone = _useTestTone,
@@ -215,12 +218,13 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         }
     }
 
-    public ChannelReader<AudioDashboardState> Subscribe(CancellationToken cancellationToken)
+    public StateSubscription<AudioDashboardState> Subscribe(CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<AudioDashboardState>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<AudioDashboardState>(new BoundedChannelOptions(1)
         {
             SingleReader = true,
-            SingleWriter = false
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
 
         lock (_subscriberSync)
@@ -228,17 +232,24 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             _subscribers.Add(channel);
         }
 
-        cancellationToken.Register(() => channel.Writer.TryComplete());
+        var registration = cancellationToken.Register(() => channel.Writer.TryComplete());
         channel.Writer.TryWrite(GetState());
-        return channel.Reader;
+        return new StateSubscription<AudioDashboardState>(channel, registration, () =>
+        {
+            lock (_subscriberSync)
+            {
+                _subscribers.Remove(channel);
+            }
+        });
     }
 
-    public ChannelReader<AudioTelemetryState> SubscribeTelemetry(CancellationToken cancellationToken)
+    public StateSubscription<AudioTelemetryState> SubscribeTelemetry(CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateUnbounded<AudioTelemetryState>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<AudioTelemetryState>(new BoundedChannelOptions(1)
         {
             SingleReader = true,
-            SingleWriter = false
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
 
         lock (_subscriberSync)
@@ -246,9 +257,15 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             _telemetrySubscribers.Add(channel);
         }
 
-        cancellationToken.Register(() => channel.Writer.TryComplete());
+        var registration = cancellationToken.Register(() => channel.Writer.TryComplete());
         channel.Writer.TryWrite(GetTelemetryState());
-        return channel.Reader;
+        return new StateSubscription<AudioTelemetryState>(channel, registration, () =>
+        {
+            lock (_subscriberSync)
+            {
+                _telemetrySubscribers.Remove(channel);
+            }
+        });
     }
 
     private static string ShortenKnownPath(string path)
@@ -668,6 +685,39 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         }
     }
 
+    public async Task<AudioDashboardState> ToggleManualSyncTickAsync()
+    {
+        await _operationGate.WaitAsync();
+
+        try
+        {
+            bool enabled;
+            lock (_sync)
+            {
+                ThrowIfCalibratingLocked();
+                if (!_isRunning)
+                {
+                    throw new InvalidOperationException("Start streaming before enabling the sync tick.");
+                }
+
+                _manualSyncTickEnabled = !_manualSyncTickEnabled;
+                enabled = _manualSyncTickEnabled;
+                _sessionStatusMessage = enabled
+                    ? "Manual sync tick enabled on live outputs."
+                    : "Manual sync tick disabled.";
+                _lastErrorMessage = string.Empty;
+            }
+
+            _audioEngineService.UpdateManualSyncTick(enabled);
+            ScheduleBroadcast(immediate: true);
+            return GetState();
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
     public Task<AudioDashboardState> OpenConfigFolderAsync()
     {
         var configPath = _configurationService.ConfigPath;
@@ -975,6 +1025,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             lock (_sync)
             {
                 _isRunning = true;
+                _manualSyncTickEnabled = false;
                 _sessionStatusMessage = "Streaming is live.";
                 UpdateOutputRemovalStateLocked();
             }
@@ -1006,6 +1057,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             lock (_sync)
             {
                 _isRunning = false;
+                _manualSyncTickEnabled = false;
                 _captureLevel = 0;
                 _roomMicLevel = 0;
                 _captureStatusText = captureStoppedMessage;
@@ -1022,6 +1074,10 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
             _logger.Error("Stop request failed.", ex);
             throw;
+        }
+        finally
+        {
+            _audioEngineService.UpdateManualSyncTick(false);
         }
     }
 
@@ -1857,5 +1913,34 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
         public string SyncStatusText { get; set; } = "Manual";
 
         public bool CanRemove { get; set; }
+    }
+
+    public sealed class StateSubscription<T> : IDisposable
+    {
+        private readonly Channel<T> _channel;
+        private readonly CancellationTokenRegistration _registration;
+        private readonly Action _unsubscribe;
+        private int _disposed;
+
+        public StateSubscription(Channel<T> channel, CancellationTokenRegistration registration, Action unsubscribe)
+        {
+            _channel = channel;
+            _registration = registration;
+            _unsubscribe = unsubscribe;
+        }
+
+        public ChannelReader<T> Reader => _channel.Reader;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            _registration.Dispose();
+            _channel.Writer.TryComplete();
+            _unsubscribe();
+        }
     }
 }

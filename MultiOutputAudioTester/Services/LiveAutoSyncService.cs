@@ -30,6 +30,7 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
     private Task? _micPumpTask;
     private Task? _analysisTask;
     private WasapiCapture? _roomCapture;
+    private MMDevice? _roomMicDevice;
     private BufferedWaveProvider? _roomCaptureBuffer;
     private ISampleProvider? _roomNormalizedProvider;
     private AutoSyncSettings _settings = new();
@@ -93,6 +94,7 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
             if (roomMic.State != DeviceState.Active)
             {
                 SetRoutesWaitingForMic($"Room microphone '{roomMic.FriendlyName}' is not active.");
+                roomMic.Dispose();
                 return;
             }
 
@@ -154,6 +156,7 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
         Task? micPumpTask;
         Task? analysisTask;
         WasapiCapture? capture;
+        MMDevice? roomMicDevice;
 
         lock (_sync)
         {
@@ -165,6 +168,8 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
             _analysisTask = null;
             capture = _roomCapture;
             _roomCapture = null;
+            roomMicDevice = _roomMicDevice;
+            _roomMicDevice = null;
             _roomCaptureBuffer = null;
             _roomNormalizedProvider = null;
             IsRunning = false;
@@ -186,6 +191,8 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
 
             capture.Dispose();
         }
+
+        roomMicDevice?.Dispose();
 
         if (micPumpTask is not null)
         {
@@ -218,6 +225,7 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
         }
 
         RoomMicLevelChanged?.Invoke(this, 0);
+        cts?.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -227,6 +235,7 @@ public sealed class LiveAutoSyncService : IAsyncDisposable
 
     private void InitializeRoomMicCapture(MMDevice roomMic)
     {
+        _roomMicDevice = roomMic;
         _roomCapture = new WasapiCapture(roomMic);
         _roomCapture.DataAvailable += OnRoomCaptureDataAvailable;
         _roomCapture.RecordingStopped += OnRoomCaptureStopped;

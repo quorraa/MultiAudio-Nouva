@@ -24,6 +24,10 @@ public sealed class AudioDashboardState
 
     public bool CanEditTopology { get; init; }
 
+    public bool CanToggleManualSyncTick { get; init; }
+
+    public bool ManualSyncTickEnabled { get; init; }
+
     public string? SelectedInputDeviceId { get; init; }
 
     public string? SelectedCalibrationInputDeviceId { get; init; }
