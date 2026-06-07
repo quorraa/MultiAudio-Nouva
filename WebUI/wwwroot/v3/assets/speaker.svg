@@ -1,0 +1,45 @@
+<svg width="420" height="420" viewBox="0 0 420 420" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="side" x1="0" x2="1">
+      <stop offset="0" stop-color="#0c111c"/>
+      <stop offset="0.55" stop-color="#272d38"/>
+      <stop offset="1" stop-color="#070a12"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" x2="1">
+      <stop offset="0" stop-color="#171d29"/>
+      <stop offset="0.65" stop-color="#343a44"/>
+      <stop offset="1" stop-color="#111622"/>
+    </linearGradient>
+    <radialGradient id="cone" cx="50%" cy="42%" r="58%">
+      <stop offset="0" stop-color="#8f98a6"/>
+      <stop offset="0.18" stop-color="#282f3b"/>
+      <stop offset="0.72" stop-color="#070a10"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="tweeter" cx="46%" cy="40%" r="58%">
+      <stop offset="0" stop-color="#cdd6e6"/>
+      <stop offset="0.24" stop-color="#5d6674"/>
+      <stop offset="0.72" stop-color="#090c12"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <filter id="shadow" x="-40%" y="-30%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <ellipse cx="214" cy="354" rx="118" ry="24" fill="#03050a" opacity="0.62"/>
+    <path d="M142 93 226 70 286 96 286 318 226 346 142 314Z" fill="url(#side)"/>
+    <path d="M142 93 226 70 226 346 142 314Z" fill="url(#front)"/>
+    <path d="M226 70 286 96 286 318 226 346Z" fill="#101621"/>
+    <path d="M153 108 214 91 214 323 153 302Z" fill="#2b313b" opacity="0.2"/>
+    <circle cx="185" cy="144" r="34" fill="#03050a"/>
+    <circle cx="185" cy="144" r="24" fill="url(#tweeter)"/>
+    <circle cx="185" cy="144" r="8" fill="#05070c"/>
+    <circle cx="184" cy="244" r="62" fill="#03050a"/>
+    <circle cx="184" cy="244" r="50" fill="url(#cone)"/>
+    <circle cx="184" cy="244" r="18" fill="#0a0d13" stroke="#4a5260" stroke-width="2"/>
+    <circle cx="156" cy="165" r="4" fill="#35e86d" opacity="0.82"/>
+    <path d="M226 70 286 96" stroke="#798191" stroke-opacity="0.34" stroke-width="2"/>
+    <path d="M142 93 226 70 286 96 286 318 226 346 142 314Z" fill="none" stroke="#697283" stroke-opacity="0.22" stroke-width="2"/>
+  </g>
+</svg>

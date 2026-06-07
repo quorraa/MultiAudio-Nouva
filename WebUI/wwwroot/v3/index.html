@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MultiAudio Nova V3 Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/v3/app.css">
+</head>
+<body>
+  <div class="v3-shell">
+    <header class="v3-topbar">
+      <div class="brand-cluster">
+        <div class="brand-orb" aria-hidden="true">M</div>
+        <div class="brand-copy">
+          <h1>MULTIAUDIO NOVA</h1>
+          <span>V3 DASHBOARD</span>
+        </div>
+        <button id="enginePill" class="live-pill" type="button">LIVE</button>
+      </div>
+
+      <div class="status-capsule">
+        <span class="status-spinner" aria-hidden="true"></span>
+        <strong>SYSTEM STATUS</strong>
+        <span id="systemDot" class="status-dot"></span>
+        <span id="systemStatusText">Optimal</span>
+      </div>
+
+      <div class="top-actions">
+        <label class="master-widget">
+          <span>MASTER</span>
+          <span class="icon-speaker" aria-hidden="true"></span>
+          <input id="masterVolumeRange" type="range" min="0" max="100" step="1">
+          <strong id="masterVolumeValue">100%</strong>
+        </label>
+        <button id="refreshBtn" class="icon-button" type="button" title="Refresh devices" aria-label="Refresh devices">⚙</button>
+        <a class="open-v2" href="/v2-Dashboard/">OPEN V2 DASHBOARD <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <div class="v3-workspace">
+      <aside class="left-rail">
+        <section class="rail-panel devices-panel">
+          <div class="panel-title">
+            <span class="panel-icon">▣</span>
+            <strong>DEVICES</strong>
+          </div>
+          <div id="deviceList" class="device-list"></div>
+          <button id="addOutputBtn" class="add-output" type="button">＋ ADD OUTPUT</button>
+        </section>
+
+        <section class="rail-panel scenes-panel">
+          <div class="panel-title">
+            <span class="panel-icon violet">◎</span>
+            <strong>SCENES <small>(OPTIONAL)</small></strong>
+          </div>
+          <button class="scene-row active" type="button"><span>⊙</span>Default Setup <b>☆</b></button>
+          <button class="scene-row" type="button"><span>⊙</span>Studio Mode</button>
+          <button class="scene-row" type="button"><span>⊙</span>Live Event</button>
+          <button class="scene-row" type="button"><span>⊙</span>Late Night <b>◕</b></button>
+        </section>
+
+        <section class="rail-panel overview-panel">
+          <div class="panel-title">
+            <span class="panel-icon green">⌘</span>
+            <strong>ROUTE OVERVIEW</strong>
+          </div>
+          <div class="overview-card">
+            <strong id="activeOutputCount">0 Active Outputs</strong>
+            <span id="routeHealthText">All systems connected</span>
+            <div class="overview-wave" aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <section class="rail-panel mini-brand">
+          <span class="mini-mark" aria-hidden="true"></span>
+          <div>
+            <strong>MULTIAUDIO NOVA V3</strong>
+            <p>Redefining audio routing</p>
+          </div>
+        </section>
+      </aside>
+
+      <main class="mixer-stage">
+        <div class="stage-head">
+          <div>
+            <h2>DEVICE MIXER</h2>
+            <p>Select a device and fine-tune your output</p>
+          </div>
+          <div class="stage-tools">
+            <button id="syncTickBtn" class="sync-button" type="button">↭ SYNC DELAY</button>
+            <button id="infoBtn" class="info-button" type="button" title="Session status" aria-label="Session status">ⓘ</button>
+          </div>
+        </div>
+
+        <section id="mixerCards" class="mixer-cards" aria-label="Output mixer cards"></section>
+
+        <section class="bottom-panels">
+          <div class="metric-panel latency-panel">
+            <span>SYSTEM LATENCY</span>
+            <p>Overall output delay</p>
+            <strong id="systemLatencyValue">0.0 ms</strong>
+            <div class="mini-wave purple" aria-hidden="true"></div>
+          </div>
+          <div class="metric-panel assistant-panel">
+            <div>
+              <span>DELAY ALIGNMENT ASSISTANT</span>
+              <p>Use Sync Delay to automatically align all outputs</p>
+            </div>
+            <button id="autoAlignBtn" class="auto-align" type="button">✧ AUTO ALIGN</button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="detail-rail">
+        <section class="detail-panel">
+          <div class="detail-head">
+            <strong>DEVICE DETAIL</strong>
+            <span aria-hidden="true">⌁</span>
+          </div>
+          <div id="detailChannelBadge" class="detail-badge">CH 1</div>
+          <div class="detail-hero">
+            <img id="detailDeviceImage" src="/v3/assets/speaker.svg" alt="">
+            <div class="device-aura" aria-hidden="true"></div>
+          </div>
+          <h2 id="detailName">No output</h2>
+          <p id="detailDevice">Choose an output</p>
+
+          <div class="detail-card status-card">
+            <span>STATUS</span>
+            <strong><i></i><b id="detailStatus">Idle</b></strong>
+            <em aria-hidden="true">⌁</em>
+          </div>
+
+          <label class="detail-card select-card">
+            <span>PLAYBACK DEVICE</span>
+            <select id="detailDeviceSelect"></select>
+          </label>
+
+          <div class="detail-card action-card">
+            <div class="action-head">
+              <span>OUTPUT ACTIONS</span>
+              <button class="action-small" type="button" data-detail-action="ping" title="Ping output" aria-label="Ping output">⌕</button>
+            </div>
+            <small>Real route controls</small>
+            <div class="action-grid">
+              <button class="route-action-btn" type="button" data-detail-action="mute">Mute</button>
+              <button class="route-action-btn" type="button" data-detail-action="solo">Solo</button>
+              <button class="route-action-btn" type="button" data-detail-action="master">Set Master</button>
+              <button class="route-action-btn" type="button" data-detail-action="ping">Ping</button>
+            </div>
+          </div>
+
+          <button id="muteDeviceBtn" class="mute-device" type="button">MUTE DEVICE</button>
+        </section>
+      </aside>
+    </div>
+
+    <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+  </div>
+
+  <script src="/v3/app.js" defer></script>
+</body>
+</html>

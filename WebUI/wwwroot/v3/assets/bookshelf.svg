@@ -1,0 +1,47 @@
+<svg width="520" height="420" viewBox="0 0 520 420" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cabA" x1="0" x2="1">
+      <stop offset="0" stop-color="#111722"/>
+      <stop offset="0.54" stop-color="#333b47"/>
+      <stop offset="1" stop-color="#090d14"/>
+    </linearGradient>
+    <radialGradient id="wooA" cx="50%" cy="42%" r="60%">
+      <stop offset="0" stop-color="#858f9e"/>
+      <stop offset="0.19" stop-color="#29313c"/>
+      <stop offset="0.74" stop-color="#070910"/>
+      <stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <filter id="sh" x="-35%" y="-30%" width="170%" height="180%">
+      <feDropShadow dx="0" dy="20" stdDeviation="16" flood-color="#000" flood-opacity="0.54"/>
+    </filter>
+  </defs>
+  <g filter="url(#sh)">
+    <ellipse cx="262" cy="355" rx="156" ry="24" fill="#02040a" opacity="0.62"/>
+    <g transform="translate(94 112)">
+      <path d="M0 22 70 0 116 18 116 197 70 218 0 194Z" fill="#0a0f17"/>
+      <path d="M0 22 70 0 70 218 0 194Z" fill="url(#cabA)"/>
+      <path d="M70 0 116 18 116 197 70 218Z" fill="#0d121b"/>
+      <circle cx="40" cy="66" r="23" fill="#03050a"/>
+      <circle cx="40" cy="66" r="16" fill="#4e5867"/>
+      <circle cx="40" cy="66" r="6" fill="#05070c"/>
+      <circle cx="40" cy="143" r="45" fill="#02040a"/>
+      <circle cx="40" cy="143" r="36" fill="url(#wooA)"/>
+      <circle cx="40" cy="143" r="13" fill="#0b0f16" stroke="#4a5360" stroke-width="1.5"/>
+      <circle cx="16" cy="85" r="3" fill="#35e86d" opacity="0.75"/>
+      <path d="M0 22 70 0 116 18 116 197 70 218 0 194Z" fill="none" stroke="#758092" stroke-opacity="0.2" stroke-width="2"/>
+    </g>
+    <g transform="translate(248 98)">
+      <path d="M0 24 78 0 132 21 132 218 78 244 0 214Z" fill="#0a0f17"/>
+      <path d="M0 24 78 0 78 244 0 214Z" fill="url(#cabA)"/>
+      <path d="M78 0 132 21 132 218 78 244Z" fill="#0d121b"/>
+      <circle cx="45" cy="77" r="26" fill="#03050a"/>
+      <circle cx="45" cy="77" r="18" fill="#596373"/>
+      <circle cx="45" cy="77" r="7" fill="#05070c"/>
+      <circle cx="45" cy="164" r="50" fill="#02040a"/>
+      <circle cx="45" cy="164" r="40" fill="url(#wooA)"/>
+      <circle cx="45" cy="164" r="14" fill="#0b0f16" stroke="#4a5360" stroke-width="1.5"/>
+      <circle cx="18" cy="98" r="3" fill="#35e86d" opacity="0.75"/>
+      <path d="M0 24 78 0 132 21 132 218 78 244 0 214Z" fill="none" stroke="#758092" stroke-opacity="0.2" stroke-width="2"/>
+    </g>
+  </g>
+</svg>

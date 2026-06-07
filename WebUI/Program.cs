@@ -94,6 +94,19 @@ app.Use(async (context, next) =>
             return;
         }
     }
+    if (path.Equals("/v3", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/v3/", StringComparison.OrdinalIgnoreCase))
+    {
+        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        var file = env.WebRootFileProvider.GetFileInfo("v3/index.html");
+        if (file.Exists)
+        {
+            context.Response.ContentType = "text/html";
+            await using var stream = file.CreateReadStream();
+            await stream.CopyToAsync(context.Response.Body);
+            return;
+        }
+    }
     if (path.Equals("/v2-Control", StringComparison.OrdinalIgnoreCase) ||
         path.Equals("/v2-Control/", StringComparison.OrdinalIgnoreCase))
     {

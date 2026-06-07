@@ -1,0 +1,27 @@
+<svg width="440" height="420" viewBox="0 0 440 420" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="body" x1="0" x2="1">
+      <stop offset="0" stop-color="#151a22"/>
+      <stop offset="0.5" stop-color="#303843"/>
+      <stop offset="1" stop-color="#080b10"/>
+    </linearGradient>
+    <pattern id="mesh" width="8" height="8" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#05070b" opacity="0.65"/>
+      <circle cx="6" cy="6" r="1" fill="#05070b" opacity="0.65"/>
+    </pattern>
+    <filter id="ds" x="-35%" y="-35%" width="170%" height="190%">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000" flood-opacity="0.58"/>
+    </filter>
+  </defs>
+  <g filter="url(#ds)">
+    <ellipse cx="222" cy="352" rx="126" ry="24" fill="#02040a" opacity="0.65"/>
+    <path d="M152 105 264 88 302 111 302 304 264 329 152 310Z" fill="#080c13"/>
+    <path d="M152 105 264 88 264 329 152 310Z" fill="url(#body)"/>
+    <path d="M264 88 302 111 302 304 264 329Z" fill="#090d14"/>
+    <path d="M169 126 249 116 249 296 169 286Z" fill="url(#mesh)" opacity="0.82"/>
+    <rect x="181" y="142" width="52" height="124" rx="26" fill="#060910" opacity="0.45"/>
+    <path d="M284 122 296 129 296 286 284 296Z" fill="#141a24"/>
+    <circle cx="186" cy="284" r="4" fill="#38e579" opacity="0.7"/>
+    <path d="M152 105 264 88 302 111 302 304 264 329 152 310Z" fill="none" stroke="#7c8490" stroke-opacity="0.22" stroke-width="2"/>
+  </g>
+</svg>
