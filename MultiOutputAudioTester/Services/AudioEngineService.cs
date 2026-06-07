@@ -164,6 +164,7 @@ public sealed class AudioEngineService : IAsyncDisposable
             _normalizedProvider = null;
             _isRunning = false;
             _coordinatedRebufferActive = false;
+            ResetManualSyncTickLocked();
         }
 
         ctsToCancel?.Cancel();
@@ -283,7 +284,7 @@ public sealed class AudioEngineService : IAsyncDisposable
             _manualSyncTickEnabled = enabled;
             if (!enabled)
             {
-                _manualSyncTickRemainingFrames = 0;
+                ResetManualSyncTickLocked();
             }
         }
     }
@@ -483,6 +484,14 @@ public sealed class AudioEngineService : IAsyncDisposable
         return _manualSyncMixScratch;
     }
 
+    private void ResetManualSyncTickLocked()
+    {
+        _manualSyncTickEnabled = false;
+        _manualSyncTickFrame = 0;
+        _manualSyncTickRemainingFrames = 0;
+        _manualSyncNoiseState = 0x6D2B79F5u;
+    }
+
     private float NextSignedNoise()
     {
         _manualSyncNoiseState ^= _manualSyncNoiseState << 13;
@@ -496,6 +505,8 @@ public sealed class AudioEngineService : IAsyncDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
+            UpdateOutputBufferSyncTargets();
+
             if (_coordinatedRebufferActive && _outputPipelines.Count > 0 && _outputPipelines.All(pipeline => pipeline.CanResumeFromRebuffer))
             {
                 foreach (var pipeline in _outputPipelines)
@@ -511,6 +522,26 @@ public sealed class AudioEngineService : IAsyncDisposable
             {
                 pipeline.PublishStatus();
             }
+        }
+    }
+
+    private void UpdateOutputBufferSyncTargets()
+    {
+        if (_outputPipelines.Count == 0)
+        {
+            return;
+        }
+
+        var timingMaster = _outputPipelines.FirstOrDefault(pipeline => pipeline.IsTimingMaster)
+            ?? _outputPipelines[0];
+        var masterBufferedMilliseconds = timingMaster.BufferedMilliseconds;
+
+        foreach (var pipeline in _outputPipelines)
+        {
+            pipeline.UpdateBufferSyncTarget(
+                ReferenceEquals(pipeline, timingMaster)
+                    ? null
+                    : masterBufferedMilliseconds);
         }
     }
 

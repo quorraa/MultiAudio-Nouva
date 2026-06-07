@@ -22,12 +22,12 @@ public sealed class AudioOutputPipeline : IDisposable
     private const double TargetBufferMilliseconds = 260;
     private const double InitialStartBufferMilliseconds = 240;
     private const double ResumeBufferMilliseconds = 220;
-    private const double DriftActivationBufferMilliseconds = 170;
     private const double RebufferThresholdMilliseconds = 28;
     private const double CriticalUnderrunThresholdMilliseconds = 12;
-    private const double MaximumRateAdjustment = 0.0010;
+    private const double BufferSyncDeadbandMilliseconds = 6;
+    private const double MaximumBufferSyncRateAdjustment = 0.0018;
+    private const double BufferSyncControllerGain = 0.000025;
     private const double MaximumCombinedRateAdjustment = 0.0025;
-    private const double ControllerGain = 0.00075;
 
     private double _meterLevel;
     private double _currentPlaybackRate = 1.0;
@@ -49,6 +49,7 @@ public sealed class AudioOutputPipeline : IDisposable
     private bool _playbackStarted;
     private bool _playbackFaulted;
     private bool _rebuffering;
+    private double? _bufferSyncTargetMilliseconds;
     private DateTime _lastRebufferRequestUtc = DateTime.MinValue;
 
     public AudioOutputPipeline(int slotIndex, MMDevice device, OutputRouteConfig config, double masterVolumePercent, AppLogger logger)
@@ -103,6 +104,8 @@ public sealed class AudioOutputPipeline : IDisposable
     public bool CanResumeFromRebuffer => _rebuffering && _bufferedProvider.BufferedDuration >= TimeSpan.FromMilliseconds(ResumeBufferMilliseconds);
 
     public bool IsTimingMaster => _isTimingMaster;
+
+    public double BufferedMilliseconds => _bufferedProvider.BufferedDuration.TotalMilliseconds;
 
     public void Start()
     {
@@ -173,6 +176,13 @@ public sealed class AudioOutputPipeline : IDisposable
         PublishStatus();
     }
 
+    public void UpdateBufferSyncTarget(double? targetMilliseconds)
+    {
+        _bufferSyncTargetMilliseconds = targetMilliseconds.HasValue
+            ? Math.Max(0, targetMilliseconds.Value)
+            : null;
+    }
+
     public void UpdateAutoSyncState(
         int autoDelayMilliseconds,
         double autoSyncPlaybackRateRatio,
@@ -217,7 +227,7 @@ public sealed class AudioOutputPipeline : IDisposable
     public void PublishStatus()
     {
         TryStartPlayback();
-        UpdateDriftCorrection();
+        UpdatePlaybackRate();
 
         var playbackState = TryGetPlaybackState();
         if (_playbackStarted &&
@@ -302,7 +312,7 @@ public sealed class AudioOutputPipeline : IDisposable
         _volumeProvider.Volume = (float)Math.Clamp(effectiveVolume, 0, 1);
     }
 
-    private void UpdateDriftCorrection()
+    private void UpdatePlaybackRate()
     {
         var playbackState = TryGetPlaybackState();
         if (_playbackFaulted || !_playbackStarted || _rebuffering || playbackState != PlaybackState.Playing)
@@ -312,21 +322,26 @@ public sealed class AudioOutputPipeline : IDisposable
             return;
         }
 
-        var bufferedMs = _bufferedProvider.BufferedDuration.TotalMilliseconds;
-        if (bufferedMs < DriftActivationBufferMilliseconds)
+        var targetMilliseconds = _bufferSyncTargetMilliseconds ?? TargetBufferMilliseconds;
+        var errorMilliseconds = _bufferedProvider.BufferedDuration.TotalMilliseconds - targetMilliseconds;
+        if (Math.Abs(errorMilliseconds) <= BufferSyncDeadbandMilliseconds)
         {
-            _bufferControlPlaybackRate += (1.0 - _bufferControlPlaybackRate) * 0.2;
+            _bufferControlPlaybackRate += (1.0 - _bufferControlPlaybackRate) * 0.18;
             ApplyCombinedPlaybackRate();
             return;
         }
 
-        var errorMs = bufferedMs - TargetBufferMilliseconds;
-        var normalizedError = errorMs / TargetBufferMilliseconds;
-        var desiredAdjustment = Math.Clamp(normalizedError * ControllerGain, -MaximumRateAdjustment, MaximumRateAdjustment);
+        var desiredAdjustment = Math.Clamp(
+            errorMilliseconds * BufferSyncControllerGain,
+            -MaximumBufferSyncRateAdjustment,
+            MaximumBufferSyncRateAdjustment);
         var desiredRate = 1.0 + desiredAdjustment;
 
-        _bufferControlPlaybackRate += (desiredRate - _bufferControlPlaybackRate) * 0.08;
-        _bufferControlPlaybackRate = Math.Clamp(_bufferControlPlaybackRate, 1.0 - MaximumRateAdjustment, 1.0 + MaximumRateAdjustment);
+        _bufferControlPlaybackRate += (desiredRate - _bufferControlPlaybackRate) * 0.12;
+        _bufferControlPlaybackRate = Math.Clamp(
+            _bufferControlPlaybackRate,
+            1.0 - MaximumBufferSyncRateAdjustment,
+            1.0 + MaximumBufferSyncRateAdjustment);
         ApplyCombinedPlaybackRate();
     }
 
