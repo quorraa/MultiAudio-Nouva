@@ -10,6 +10,10 @@ let teleStream = null;
 let pollTimer = null;
 let telePollTimer = null;
 let settingsTimer = null;
+let pendingState = null;
+let activeRouteSlot = 0;
+let activeInteractionCount = 0;
+let renderPausedUntil = 0;
 const routeTimers = new Map();
 
 const accents = ["#56f36e", "#4ce7f2", "#ff66ad", "#a56bff", "#f6bc45"];
@@ -60,7 +64,7 @@ function bindEvents() {
   });
 
   el.refreshBtn.addEventListener("click", () => mutate(() => api("/api/refresh-devices", { method: "POST" })));
-  el.syncTickBtn.addEventListener("click", () => mutate(() => api("/api/sync-tick/toggle", { method: "POST" })));
+  el.syncTickBtn.addEventListener("click", toggleSyncTickSound);
   el.autoAlignBtn.addEventListener("click", () => mutate(() => api("/api/calibrate", { method: "POST" })));
   el.addOutputBtn.addEventListener("click", () => mutate(() => api("/api/outputs", { method: "POST" })));
   el.infoBtn.addEventListener("click", () => showToast(state?.sessionStatusMessage || "Session status unavailable."));
@@ -75,11 +79,15 @@ function bindEvents() {
     if (!state) {
       return;
     }
+    markInteraction();
     state.masterVolumePercent = Number(el.masterVolumeRange.value);
     paintRange(el.masterVolumeRange, state.masterVolumePercent, "#56f36e");
     el.masterVolumeValue.textContent = `${Math.round(state.masterVolumePercent)}%`;
-    queueSettings();
   });
+  el.masterVolumeRange.addEventListener("pointerdown", beginInteraction);
+  el.masterVolumeRange.addEventListener("pointerup", () => endInteraction(() => queueSettings(0)));
+  el.masterVolumeRange.addEventListener("pointercancel", () => endInteraction(() => queueSettings(0)));
+  el.masterVolumeRange.addEventListener("change", () => queueSettings(0));
 
   el.deviceList.addEventListener("click", (event) => {
     const row = event.target.closest("[data-slot]");
@@ -106,7 +114,10 @@ function bindEvents() {
 
   el.mixerCards.addEventListener("input", handleMixerInput);
   el.mixerCards.addEventListener("change", handleMixerInput);
+  el.mixerCards.addEventListener("pointerdown", handleMixerPointerDown);
   el.detailDeviceSelect.addEventListener("change", handleDetailDeviceChange);
+  document.addEventListener("pointerup", endRouteInteraction);
+  document.addEventListener("pointercancel", endRouteInteraction);
   document.querySelector(".detail-panel")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-detail-action]");
     if (!button) {
@@ -184,13 +195,19 @@ function connectTelemetryStream() {
 }
 
 function setState(nextState) {
+  if (isInteractionActive()) {
+    pendingState = nextState;
+    setTimeout(flushPendingState, 950);
+    return;
+  }
+
   state = nextState;
   normalizeSelection();
   render();
 }
 
 function patchTelemetry(telemetry) {
-  if (!state || !Array.isArray(telemetry?.outputs)) {
+  if (!state || !Array.isArray(telemetry?.outputs) || isInteractionActive()) {
     return;
   }
   for (const teleOut of telemetry.outputs) {
@@ -258,6 +275,11 @@ function renderHeader() {
   el.addOutputBtn.disabled = !state?.canAddOutput;
   el.syncTickBtn.disabled = !state?.canToggleManualSyncTick;
   el.syncTickBtn.classList.toggle("active", !!state?.manualSyncTickEnabled);
+  el.syncTickBtn.textContent = state?.manualSyncTickEnabled ? "↭ TICK SOUND ON" : "↭ SYNC TICK SOUND";
+  el.syncTickBtn.title = state?.canToggleManualSyncTick
+    ? (state?.manualSyncTickEnabled ? "Disable sync tick sound" : "Enable sync tick sound on live outputs")
+    : "Start streaming to enable sync tick sound";
+  el.syncTickBtn.setAttribute("aria-pressed", String(!!state?.manualSyncTickEnabled));
   el.autoAlignBtn.disabled = !state?.canRunCalibration;
 }
 
@@ -435,24 +457,30 @@ function handleMixerInput(event) {
   if (!input || !state) {
     return;
   }
+
+  markInteraction();
   const slot = Number(input.dataset.slot);
   const output = findOutput(slot);
   if (!output) {
     return;
   }
-  selectSlot(slot);
+  activeRouteSlot = slot;
+  selectSlot(slot, false);
   const value = Number(input.value);
   if (input.dataset.action === "volume") {
     output.volumePercent = clamp(value, 0, 100);
     paintRange(input, output.volumePercent, channelAccent(slot));
+    patchCardControl(input, `${Math.round(output.volumePercent)}%`);
   }
   if (input.dataset.action === "delay") {
     output.delayMilliseconds = clamp(value, 0, 500);
     paintRange(input, (output.delayMilliseconds / 500) * 100, channelAccent(slot));
+    patchCardControl(input, `${Math.round(output.delayMilliseconds)} ms`);
   }
-  renderCards();
-  renderDetail();
-  queueRoute(slot);
+
+  if (event.type === "change") {
+    queueRoute(slot, 0);
+  }
 }
 
 function triggerRouteAction(slot, action) {
@@ -489,20 +517,28 @@ function handleDetailDeviceChange() {
     return;
   }
   output.selectedDeviceId = normalizeEmpty(el.detailDeviceSelect.value);
-  queueRoute(output.slotIndex);
+  queueRoute(output.slotIndex, 0);
 }
 
-function queueSettings() {
+async function toggleSyncTickSound() {
+  await mutate(async () => {
+    const nextState = await api("/api/sync-tick/toggle", { method: "POST" });
+    showToast(nextState.sessionStatusMessage || (nextState.manualSyncTickEnabled ? "Sync tick sound enabled." : "Sync tick sound disabled."));
+    return nextState;
+  });
+}
+
+function queueSettings(delay = SETTINGS_DEBOUNCE_MS) {
   clearTimeout(settingsTimer);
   settingsTimer = setTimeout(() => {
     mutate(() => api("/api/settings", {
       method: "PUT",
       body: settingsPayload()
     }), false);
-  }, SETTINGS_DEBOUNCE_MS);
+  }, delay);
 }
 
-function queueRoute(slot) {
+function queueRoute(slot, delay = ROUTE_DEBOUNCE_MS) {
   clearTimeout(routeTimers.get(slot));
   routeTimers.set(slot, setTimeout(() => {
     routeTimers.delete(slot);
@@ -510,7 +546,7 @@ function queueRoute(slot) {
       method: "PUT",
       body: routePayload(slot)
     }), false);
-  }, ROUTE_DEBOUNCE_MS));
+  }, delay));
 }
 
 function settingsPayload() {
@@ -577,13 +613,18 @@ function normalizeSelection() {
   localStorage.setItem("v3.selectedSlot", String(selectedSlot));
 }
 
-function selectSlot(slot) {
+function selectSlot(slot, renderNow = true) {
   if (slot === selectedSlot) {
     return;
   }
   selectedSlot = slot;
   localStorage.setItem("v3.selectedSlot", String(slot));
-  render();
+  if (renderNow) {
+    render();
+    return;
+  }
+
+  syncSelectedClasses();
 }
 
 function selectedOutput() {
@@ -631,6 +672,74 @@ function deviceKind(output) {
 function paintRange(range, percent, color) {
   range.style.setProperty("--range-pct", `${clamp(percent, 0, 100)}%`);
   range.style.setProperty("--range-color", color);
+}
+
+function handleMixerPointerDown(event) {
+  const input = event.target.closest("[data-action]");
+  if (!input) {
+    return;
+  }
+
+  beginInteraction();
+  activeRouteSlot = Number(input.dataset.slot) || 0;
+}
+
+function endRouteInteraction() {
+  if (activeRouteSlot > 0) {
+    queueRoute(activeRouteSlot, 0);
+    activeRouteSlot = 0;
+  }
+
+  endInteraction();
+}
+
+function beginInteraction() {
+  activeInteractionCount++;
+  markInteraction();
+}
+
+function endInteraction(afterEnd) {
+  activeInteractionCount = Math.max(0, activeInteractionCount - 1);
+  markInteraction(180);
+  if (typeof afterEnd === "function") {
+    afterEnd();
+  }
+  setTimeout(flushPendingState, 220);
+}
+
+function markInteraction(milliseconds = 900) {
+  renderPausedUntil = Math.max(renderPausedUntil, Date.now() + milliseconds);
+}
+
+function isInteractionActive() {
+  return activeInteractionCount > 0 || Date.now() < renderPausedUntil;
+}
+
+function flushPendingState() {
+  if (isInteractionActive() || !pendingState) {
+    return;
+  }
+
+  const nextState = pendingState;
+  pendingState = null;
+  state = nextState;
+  normalizeSelection();
+  render();
+}
+
+function syncSelectedClasses() {
+  document.querySelectorAll("[data-slot]").forEach((node) => {
+    node.classList.toggle("selected", Number(node.dataset.slot) === selectedSlot && node.classList.contains("mixer-card"));
+    node.classList.toggle("active", Number(node.dataset.slot) === selectedSlot && node.classList.contains("device-row"));
+  });
+}
+
+function patchCardControl(input, valueText) {
+  const controlBox = input.closest(".control-box");
+  const valueNode = controlBox?.querySelector(".control-value");
+  if (valueNode) {
+    valueNode.textContent = valueText;
+  }
 }
 
 function showToast(message) {

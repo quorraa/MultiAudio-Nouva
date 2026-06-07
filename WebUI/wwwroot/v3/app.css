@@ -31,6 +31,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
+  user-select: none;
 }
 
 body {
@@ -550,7 +551,9 @@ a {
 
 .sync-button {
   min-height: 40px;
+  min-width: 188px;
   padding: 0 28px;
+  position: relative;
   color: #dce7ff;
   background: rgba(35, 50, 82, 0.82);
 }
@@ -558,6 +561,21 @@ a {
 .sync-button.active {
   color: var(--green);
   border-color: rgba(86, 243, 110, 0.36);
+  background: linear-gradient(180deg, rgba(30, 103, 66, 0.34), rgba(24, 59, 48, 0.34));
+  box-shadow: 0 0 18px rgba(86, 243, 110, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.sync-button.active::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 12px rgba(86, 243, 110, 0.72);
 }
 
 .info-button {
@@ -795,6 +813,12 @@ input[type="range"] {
   background:
     linear-gradient(90deg, var(--range-color, var(--green)) var(--range-pct, 50%), rgba(121, 139, 170, 0.58) 0);
   outline: none;
+  touch-action: pan-y;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
