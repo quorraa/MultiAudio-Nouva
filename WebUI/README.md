@@ -160,13 +160,13 @@ Portable build:
 Versioned portable build:
 
 ```powershell
-.\scripts\publish-portable.ps1 -Version 0.5.0
+.\scripts\publish-portable.ps1 -Version 0.75.0
 ```
 
 Installer build with Inno Setup 6:
 
 ```powershell
-.\scripts\build-installer.ps1 -Version 0.5.0
+.\scripts\build-installer.ps1 -Version 0.75.0
 ```
 
 Installer dependency:
