@@ -2,47 +2,25 @@
 
 `MultiAudio Nouva` is a Windows-first multi-output audio routing and sync toolset. The original desktop host lives in `MultiOutputAudioTester`, and the current primary control surface lives in `WebUI` as a local browser app backed by the same audio engine.
 
-## Current Route Map
+## Astra is the default
 
-The local WebUI now exposes multiple surfaces instead of a single route:
+Open `/` or `/astra/` for Astra: responsive source and output controls, live signal meters,
+master and per-output gain, delay, mute/solo, device profiles, synchronization and calibration.
+Connection loss disables commands; errors are shown in the control surface.
 
-- `/`
-  - `Launch Deck`
-  - default route
-  - command-center style overview and entry point
-- `/v1/`
-  - `v1 Legacy`
-  - preserved earlier launch-deck/control surface
-- `/v2/`
-  - `v2 Control`
-  - operator/control route
-- `/v2-Dashboard/`
-  - `v2 Dashboard`
-  - dashboard-oriented room/map route
-- `/v2-Codex/`
-  - alternate route
-- `/v2-Tactile/`
-  - alternate route with the tactile console treatment
+Previous pages are preserved under `WebUI/wwwroot/legacy/`. `/legacy/` is the archive index.
+Versions v1, v2, and v3 remain available at `/legacy/v1/`, `/legacy/v2/`, and `/legacy/v3/`.
+Their original URLs (including assets) continue to work. Launch Deck, Launch Neo, the
+v2 variants, and the original root shell are also archived. All pages share one engine.
 
-Every route now shares the same route-picker model so navigation no longer depends on accumulating one-off buttons.
+Backend improvements include ordered atomic config writes, pending-save flushing at shutdown,
+validation before duplicate device assignments, finite-number and sync-mode checks, cross-origin
+API protection, and proper 404 responses. Existing audio processing and desktop host are retained.
 
-## Changes Since `ae1c25e`
+See [WebUI documentation](WebUI/README.md) for run instructions and API details.
 
-- Default route moved from legacy `v1` to the new `Launch Deck`.
-- `v1` was preserved as its own legacy route instead of being overwritten.
-- `v2 Control` and `v2 Dashboard` are now separate routes instead of sharing the same path.
-- Added device-specific SVG icon support for speakers, bookshelf speakers, soundbars, portable speakers, and headphones.
-- Added per-device customization:
-  - custom speaker/display name
-  - explicit device type override for icon selection
-  - persisted in local config
-- Added `Open Folder` actions where long config-path text was previously taking space.
-- Added safe cleanup scripts for stale generated build output:
-  - `scripts/cleanup-webui-temp.ps1`
-  - `scripts/cleanup-wpf-obj.ps1`
-- Added new verification screenshots for launch and dashboard device customization flows.
+## Historical WebUI Screenshots
 
-## Recent WebUI Screenshots
 
 ### Launch Deck
 

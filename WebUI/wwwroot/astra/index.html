@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>Astra · Listening studio</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/astra/app.css">
+  <script type="module" src="/astra/app.js"></script>
+</head>
+<body data-view="room">
+<div class="studio-shell">
+  <header class="topbar">
+    <a class="brand" href="/astra/" aria-label="Astra home"><span class="brand-mark">✳</span><span>astra<small>by MultiAudio</small></span></a>
+    <div class="view-switch" role="group" aria-label="Workspace view"><button id="roomView" aria-pressed="true">Listening room</button><button id="mixerView" aria-pressed="false">Mixing console</button></div>
+    <div class="quick-audio-controls" role="group" aria-label="Sync sound controls"><button id="markerNoise" disabled aria-pressed="false">Sync noise: OFF</button><button id="tick" disabled aria-pressed="false">▶ 4-beat tick</button></div>
+    <div class="top-status"><span id="connection" role="status">Connecting…</span><a href="/legacy/">Archive ↗</a></div>
+  </header>
+  <nav class="tool-rail" aria-label="Studio tools">
+    <button data-open="sourceDialog" title="Source setup"><span>◉</span><small>Source</small></button>
+    <button data-open="syncDialog" title="Synchronization"><span>◎</span><small>Sync</small></button>
+    <button data-open="activityDialog" title="Session activity"><span>≋</span><small>Activity</small></button>
+    <button data-open="historyDialog" title="Signal history"><span>⌁</span><small>History</small></button>
+    <button id="shortcuts" class="rail-bottom" title="Keyboard shortcuts"><span>⌘</span><small>Keys</small></button>
+  </nav>
+  <main class="listening-room" aria-label="Listening room">
+    <div class="room-heading"><div><span class="eyebrow">YOUR LISTENING SPACE</span><h1>Sound, in orbit<span>.</span></h1></div><div class="room-state"><span id="telemetryStatus">Waiting for telemetry</span><span id="assignedCount">—</span><small id="assignedHint">Awaiting devices</small></div></div>
+    <div class="room-canvas"><svg id="signalMap" viewBox="0 0 900 650" role="group" aria-label="Listening room. Select a speaker to edit its controls."></svg></div>
+    <div class="room-foot"><span><i></i> Select a speaker to shape its sound</span><span>Routing layout · not physical distance</span></div>
+  </main>
+  <section class="inspector" id="outputs" aria-label="Output controls">
+    <div class="inspector-heading"><div><span class="eyebrow" id="inspectorEyebrow">SELECTED OUTPUT</span><h2 id="inspectorTitle">Channel controls</h2></div><span id="count" class="channel-count">0</span></div>
+    <div class="channel-toolbar"><label class="route-search"><span class="sr-only">Find an output</span><input id="routeSearch" type="search" placeholder="Find a channel…"></label><button id="add" disabled aria-label="Add output" title="Add output">＋</button></div>
+    <div class="remove-selected-row"><button id="removeSelected" disabled>Remove selected output</button><span id="removeHint"></span></div>
+    <div id="channelPicker" class="channel-picker" role="group" aria-label="Select output"></div>
+    <p id="routeSearchEmpty" class="hint" hidden>No channels match your search.</p>
+    <div id="routes" class="routes"><p class="empty">Connecting to your devices…</p></div>
+  </section>
+  <footer class="transport-bar">
+    <div class="engine-status"><span class="engine-lamp"></span><div><strong id="engine">Connecting</strong><span id="session" role="status">Waiting for the local audio service.</span></div></div>
+    <div class="transport-actions"><button id="stop" class="stop-button" disabled aria-label="Stop streaming">■</button><button id="start" class="play-button" disabled>▶ <span>Start streaming</span></button></div>
+    <div class="master-control"><label for="master">MASTER <output id="masterValue">—</output></label><input id="master" aria-label="Master volume" type="range" min="0" max="100" step="0.1" disabled><button id="dim" disabled aria-pressed="false">Dim −20 dB</button></div>
+    <div class="main-level"><span>INPUT</span><meter id="capture" min="0" max="1" value="0" aria-label="Input signal level"></meter><strong id="peakReadout">—</strong></div>
+  </footer>
+</div>
+<div id="error" class="error" role="alert" hidden></div>
+<div id="commandStatus" class="command-status" role="status" aria-live="polite" hidden></div>
+<dialog id="sourceDialog" class="utility-dialog"><div class="dialog-heading"><div><span class="eyebrow">SIGNAL SOURCE</span><h2>Where it begins.</h2></div><button data-close aria-label="Close source setup">×</button></div><label>Capture input<select id="input" disabled></select></label><label class="check"><input type="checkbox" id="tone" disabled> Use test tone</label><p class="hint">Stop streaming to change the capture input or test tone.</p><button id="refresh" disabled>↻ Refresh devices</button></dialog>
+<dialog id="syncDialog" class="utility-dialog"><div class="dialog-heading"><div><span class="eyebrow">TIMING & ALIGNMENT</span><h2>Bring it together.</h2></div><button data-close aria-label="Close synchronization">×</button></div><div class="sync-overview"><strong id="lockReadout">—</strong><div>outputs locked<small id="lockHint">Awaiting measurements</small></div></div><label>Room microphone<select id="mic" disabled></select></label><label>Auto-sync mode<select id="mode" disabled><option value="Off">Off · manual timing</option><option value="MonitorOnly">Monitor · measure only</option><option value="Control">Control · automatic alignment</option></select></label><p class="hint">The Sync noise switch at the top turns off the acoustic auto-sync markers. The four-beat tick is independent.</p><label>Marker level <output id="markerValue">—</output><input id="marker" aria-label="Marker level" type="range" min="0" max="5" step="0.1" disabled></label><div class="signal"><span>ROOM MIC</span><meter id="room" min="0" max="1" value="0" aria-label="Room microphone level"></meter></div><div class="actions"><button id="calibrate" disabled>Calibrate</button><button id="cancel" disabled>Cancel</button><button id="tickDialog" disabled aria-pressed="false">Start four-beat check</button></div><div class="beat-pattern" aria-label="Source sync beat"><span data-beat="1">1</span><span data-beat="2">2</span><span data-beat="3">3</span><span data-beat="4">4</span></div><p class="beat-caption">1 · STRONG / 2 · tick / 3 · tick / 4 · tick · one second each</p><p class="hint">Each output keeps its own sound: 1 low, 2 mid, 3 high, 4 bright (then repeat). Compare two speakers by muting the others. The click heard first is ahead: add +10 ms to that output, then fine-tune with +1 ms until they merge. Align the strong first clicks to avoid a whole-second mismatch. The screen shows source timing, not arrival at your ears.</p><p id="calibration" class="hint" role="status">Calibration idle.</p></dialog>
+<dialog id="activityDialog" class="utility-dialog activity-dialog"><div class="dialog-heading"><div><span class="eyebrow">SESSION ACTIVITY</span><h2>Behind the sound.</h2></div><button data-close aria-label="Close activity">×</button></div><div class="log-toolbar"><label>Search activity<input type="search" id="logSearch" placeholder="Device, warning, calibration…"></label><label>Show<select id="logLevel"><option value="all">All events</option><option value="warnings">Warnings &amp; errors</option><option value="calibration">Calibration</option></select></label></div><p id="lastError" class="hint"></p><ol id="logs"></ol><div class="actions"><button id="exportLogs">Export logs ↓</button><button id="config" disabled>Open config folder ↗</button></div></dialog>
+<dialog id="historyDialog" class="utility-dialog history-dialog"><div class="dialog-heading"><div><span class="eyebrow">SIGNAL HISTORY</span><h2>The last 30 seconds.</h2></div><button data-close aria-label="Close signal history">×</button></div><div class="history-heading"><span>● Input <b>● Room microphone</b></span><button id="holdHistory" aria-pressed="false">Hold graph</button></div><canvas id="levelHistory" height="130" role="img" aria-label="Last 30 seconds of input and room microphone peak levels"></canvas><p id="historyDescription" class="hint">Waiting for measured audio levels.</p><div class="actions"><span id="peakHold">Peak hold: —</span><button id="resetPeak">Reset peak hold</button></div></dialog>
+<dialog id="shortcutDialog"><div class="section-title"><h2>Keyboard shortcuts</h2><button id="closeShortcuts" aria-label="Close shortcuts">×</button></div><p><kbd>Space</kbd> Start / stop streaming</p><p><kbd>/</kbd> Find an output</p><p><kbd>D</kbd> Dim / restore master volume</p><p class="hint">Shortcuts are inactive while typing or when a dialog is open.</p></dialog>
+<dialog id="profile"><form id="profileForm"><div class="section-title"><h2>Customize device</h2><button type="button" id="closeProfile" aria-label="Close dialog">×</button></div><label>Display name<input id="alias" maxlength="80"></label><label>Device icon<select id="icon"><option value="auto">Automatic</option><option value="speaker">Speaker</option><option value="bookshelf">Bookshelf</option><option value="portable">Portable</option><option value="soundbar">Soundbar</option><option value="headphones">Headphones</option></select></label><p id="profileError" role="alert"></p><button class="primary" type="submit">Save device</button></form></dialog>
+</body></html>

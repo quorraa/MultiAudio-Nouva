@@ -4,21 +4,15 @@
 
 ## Current Routes
 
-- `/`
-  - `Launch Deck`
-  - current default route
-- `/v1/`
-  - `v1 Legacy`
-- `/v2/`
-  - `v2 Control`
-- `/v2-Dashboard/`
-  - `v2 Dashboard`
-- `/v2-Codex/`
-  - alternate route
-- `/v2-Tactile/`
-  - alternate route
+- `/`, `/index.html`, `/astra`, `/astra/`: Astra (default).
+- `/legacy/`: historical control-surface archive.
+- `/legacy/v1/`, `/legacy/v2/`, `/legacy/v3/`: preserved versions.
+- Other archived pages: `launch`, `launch-neo`, `v2-Control`, `v2-Dashboard`,
+  `v2-Codex`, `v2-Tactile`, and `original`, beneath `/legacy/`.
+- Original version and launch URLs remain compatible, including absolute asset links.
 
-All major routes now expose a unified route picker.
+Astra has no external browser dependencies. HTML, CSS and JavaScript live in `wwwroot/astra/`.
+The historical pages retain their existing behavior and share the same API.
 
 ## Dependencies
 
@@ -32,7 +26,7 @@ All major routes now expose a unified route picker.
 - Reuses the current audio engine, device enumeration, config persistence, live auto-sync, and calibration services.
 - Removes the WPF window from the control loop. The browser becomes the control surface.
 - Adds multiple route styles instead of a single page:
-  - `Launch Deck`
+  - `Astra` (default)
   - `v1 Legacy`
   - `v2 Control`
   - `v2 Dashboard`
@@ -53,22 +47,10 @@ All major routes now expose a unified route picker.
 - `Services/AudioControlService.cs`
   - Replaces the WPF view-model role for browser usage.
   - Manages in-memory state, validation, config saving, start/stop, calibration, logs, and live output metrics.
-- `wwwroot/index.html`
-  - Legacy root shell. The current default route is served from `wwwroot/launch/index.html`.
-- `wwwroot/app.css`
-  - Legacy root route styling.
-- `wwwroot/app.js`
-  - Legacy root route client.
-- `wwwroot/launch/`
-  - Current default launch deck route.
-- `wwwroot/v2/`
-  - `v2 Control`.
-- `wwwroot/v2-Dashboard/`
-  - `v2 Dashboard`.
-- `wwwroot/v2-Codex/`
-  - Codex alternate route.
-- `wwwroot/v2-Tactile/`
-  - tactile alternate route.
+- `wwwroot/astra/`
+  - Default Astra control surface.
+- `wwwroot/legacy/`
+  - Archive index and preserved historical control surfaces.
 - `wwwroot/device-icons/`
   - shared SVG icon assets used by launch and dashboard surfaces.
 
@@ -204,22 +186,63 @@ pwsh -ExecutionPolicy Bypass -File .\scripts\cleanup-wpf-obj.ps1 -IncludeRelease
 
 These scripts are intentionally restricted to generated temp/build artifacts and do not target live source files or `wwwroot`.
 
-## Recent Additions Since The Last README Update
+## Astra verification
 
-- default route changed to `Launch Deck`
-- `v1 Legacy` preserved separately
-- `v2 Dashboard` separated from `v2 Control`
-- shared SVG device icon system added
-- playback-device alias/type customization added
-- config-folder open actions added in the UI
-- route picker unified across the main pages
-- safe cleanup scripts added for stale generated build output
+Build: `dotnet build WebUI/WebUI.csproj` from the repository root.
 
-## Recommended next steps
+Use an isolated configuration for tests (the ordinary app still uses the existing LocalAppData config):
 
-If you want this to feel even more like a desktop widget later without changing the backend again, the best follow-up path is:
+```powershell
+$env:MULTIAUDIO_CONFIG_PATH = "$PWD/artifacts/astra-test/config.json"
+$env:MULTIAUDIO_WEBUI_PORT = '5099'
+$env:MULTIAUDIO_NO_BROWSER = '1'
+dotnet run --project WebUI/WebUI.csproj --no-launch-profile
+```
 
-1. Keep this ASP.NET Core + browser UI as the source of truth.
-2. Wrap it in a lightweight desktop shell only after the web flow feels right.
-3. Preferred wrapper order:
-   `Tauri` for a lighter native shell, then `Electron` only if you need broader desktop integration faster than weight matters.
+In another terminal, run `python tests/astra_api_smoke.py http://localhost:5099`.
+This checks routing, rejected requests, output lifecycle, duplicate assignment rollback,
+and mute/solo state. It changes only the test host's route state and does not start playback.
+`GET /api/health` returns a lightweight host-health response.
+
+Astra accepts both historical SSE property casing and REST JSON casing. Meter updates use
+the separate telemetry stream, avoiding rebuilding focused controls on each audio frame.
+Actual speaker latency, audible quality and room-microphone calibration need hardware listening tests.
+
+## Astra studio controls
+
+The default listening room arranges outputs around the source. Select a speaker or channel number to edit it in the adjacent controls. Switch to Mixing console for simultaneous channel strips with vertical faders. Source setup, synchronization, session logs and signal history open from the left tool rail. Transport and master volume remain visible.
+
+Device positions represent routing layout, not physical distances. Connections animate only when fresh telemetry reports signal activity. The 30-second graph displays measured peak amplitude in dBFS and supports hold and peak reset.
+
+Keyboard shortcuts: Space starts/stops, D dims/restores, and / focuses output search. Shortcuts do not intercept typing or open dialogs.
+
+## Four-beat synchronization check
+
+Enable the four-beat tick while streaming. Each output keeps a fixed short click: 1 low (700 Hz), 2 mid (1400 Hz), 3 high (2800 Hz), 4 bright (4200 Hz); voices repeat after four outputs. Beats occur once a second, with a stronger first beat every four seconds.
+
+Compare two speakers by muting the others. The click heard first identifies the earlier speaker: add delay to it in 10 ms steps, then 1 ms until the clicks merge. Align the strong first beats to avoid whole-second mismatch. Four-second offsets remain ambiguous.
+
+All clicks share one source-frame clock and enter each output before delay and volume processing. Re-enabling restarts at beat 1. The screen shows source generation, not acoustic arrival. Legacy tick controls use the same engine sound.
+
+Verification:
+
+- `node --test --test-isolation=none tests/astra_visualizer.test.mjs`
+- `dotnet run --project tests/SyncTickTests/SyncTickTests.csproj -- artifacts/astra-test/four-beat-sync.wav`
+- `python tests/astra_sync_engine.py http://localhost:5100` against a separate idle test host with `MULTIAUDIO_CONFIG_PATH` set to disposable test data. This requires a VB-Audio virtual endpoint and uses zero output/master volume.
+
+See [backend review](../docs/astra-backend-review.md) for future reliability and telemetry improvements.
+
+### Output count and sync sounds
+
+Saved configurations now preserve any output count of one or more; reducing to two outputs no longer restores a third on restart. Fresh installs still start with three empty routes.
+
+Remove the selected output using the visible **Remove output** action above the channel picker, or the × at the top of its channel strip. Stop streaming before adding or removing outputs.
+
+The workspace header exposes two independent controls:
+
+- **Sync noise: ON/OFF** disables/enables the acoustic auto-sync markers and measurement mode. Turning it off leaves manual delays and the four-beat tick available.
+- **4-beat tick / Stop tick** starts/stops the audible four-tone check while streaming.
+
+Muting marker noise clears its internal delay line so queued marker samples do not continue into new audio blocks. Audio already buffered by an output device can still take time to finish playing.
+
+Regression checks: `dotnet run --project tests/AudioControlTests/AudioControlTests.csproj`.

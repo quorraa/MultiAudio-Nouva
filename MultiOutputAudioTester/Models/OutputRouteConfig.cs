@@ -30,7 +30,7 @@ public sealed class OutputRouteConfig
         return outputs;
     }
 
-    public static List<OutputRouteConfig> Normalize(IEnumerable<OutputRouteConfig>? outputs, int minimumCount = 3)
+    public static List<OutputRouteConfig> Normalize(IEnumerable<OutputRouteConfig>? outputs, int minimumCount = 1)
     {
         minimumCount = Math.Max(1, minimumCount);
         if (outputs is null)

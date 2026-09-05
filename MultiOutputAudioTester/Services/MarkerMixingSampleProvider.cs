@@ -60,7 +60,14 @@ public sealed class MarkerMixingSampleProvider : ISampleProvider
         {
             lock (_sync)
             {
-                _markerLevelPercent = Math.Clamp(value, 0, 5);
+                var nextLevel = Math.Clamp(value, 0, 5);
+                if (nextLevel == 0 && _markerLevelPercent > 0)
+                {
+                    // Muting must also discard markers waiting in the delay line.
+                    Array.Clear(_markerDelayHistory);
+                    Array.Clear(_delayedMarkerScratch);
+                }
+                _markerLevelPercent = nextLevel;
             }
         }
     }

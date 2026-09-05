@@ -12,11 +12,12 @@ public sealed class ConfigurationService
     };
 
     private readonly AppLogger _logger;
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public ConfigurationService(AppLogger logger)
     {
         _logger = logger;
-        ConfigPath = Path.Combine(
+        ConfigPath = Environment.GetEnvironmentVariable("MULTIAUDIO_CONFIG_PATH") ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MultiOutputAudioTester",
             "config.json");
@@ -58,6 +59,8 @@ public sealed class ConfigurationService
 
     public async Task SaveAsync(AppConfig config)
     {
+        await _saveGate.WaitAsync();
+        var temporaryPath = ConfigPath + ".tmp";
         try
         {
             config.EnsureDefaults();
@@ -67,12 +70,21 @@ public sealed class ConfigurationService
                 Directory.CreateDirectory(directory);
             }
 
-            await using var stream = File.Create(ConfigPath);
-            await JsonSerializer.SerializeAsync(stream, config, SerializerOptions);
+            await using (var stream = File.Create(temporaryPath))
+            {
+                await JsonSerializer.SerializeAsync(stream, config, SerializerOptions);
+                await stream.FlushAsync();
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporaryPath, ConfigPath, overwrite: true);
         }
         catch (Exception ex)
         {
             _logger.Error("Failed to save config.", ex);
+        }
+        finally
+        {
+            _saveGate.Release();
         }
     }
 }

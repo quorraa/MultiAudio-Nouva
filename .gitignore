@@ -18,6 +18,7 @@ WebUI/artifacts_*/
 .playwright-mcp/
 
 # Scratch/test files
+artifacts/astra-test/
 shell_test.txt
 test_apply_patch.txt
 

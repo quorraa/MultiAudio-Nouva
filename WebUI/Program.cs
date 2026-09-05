@@ -39,126 +39,40 @@ app.Lifetime.ApplicationStarted.Register(() =>
     TryOpenBrowser(launchUrl);
 });
 
+// Preserve historical URLs and absolute asset references after archival.
+var legacyRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    "v1", "v2", "v3", "v2-Control", "v2-Dashboard", "v2-Codex",
+    "v2-Tactile", "launch", "launch-neo"
+};
 app.Use(async (context, next) =>
 {
-    var path = context.Request.Path.Value ?? "";
-    if (path.Equals("/", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/index.html", StringComparison.OrdinalIgnoreCase))
+    var path = context.Request.Path.Value ?? "/";
+    if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
     {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("launch/index.html");
-        if (file.Exists)
+        context.Response.Headers.CacheControl = "no-store";
+        // Local controls must not accept cross-origin browser commands.
+        if (context.Request.Headers.TryGetValue("Origin", out var origin) &&
+            (!Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var uri) ||
+             !string.Equals(uri.Authority, context.Request.Host.Value, StringComparison.OrdinalIgnoreCase) ||
+             !string.Equals(uri.Scheme, context.Request.Scheme, StringComparison.OrdinalIgnoreCase)))
         {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = "Cross-origin audio control is not allowed." });
             return;
         }
     }
-    if (path.Equals("/v1", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v1/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v1/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v2", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v2/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v2/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v2-Dashboard", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v2-Dashboard/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v2-Dashboard/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v3", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v3/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v3/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v2-Control", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v2-Control/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v2-Control/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v2-Codex", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v2-Codex/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v2-Codex/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/v2-Tactile", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/v2-Tactile/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("v2-Tactile/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
-    if (path.Equals("/launch-neo", StringComparison.OrdinalIgnoreCase) ||
-        path.Equals("/launch-neo/", StringComparison.OrdinalIgnoreCase))
-    {
-        var env = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
-        var file = env.WebRootFileProvider.GetFileInfo("launch-neo/index.html");
-        if (file.Exists)
-        {
-            context.Response.ContentType = "text/html";
-            await using var stream = file.CreateReadStream();
-            await stream.CopyToAsync(context.Response.Body);
-            return;
-        }
-    }
+    var firstSegment = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+    if (legacyRoutes.Contains(firstSegment))
+        path = "/legacy" + path;
+    else if (path is "/app.js" or "/app.css")
+        path = "/legacy/original" + path;
+    if (path is "/" or "/index.html") path = "/astra/index.html";
+    if (path.Equals("/astra", StringComparison.OrdinalIgnoreCase)) path = "/astra/index.html";
+    if (path.Equals("/legacy", StringComparison.OrdinalIgnoreCase)) path = "/legacy/index.html";
+    if (path.StartsWith("/legacy/", StringComparison.OrdinalIgnoreCase) && !Path.HasExtension(path))
+        path = path.TrimEnd('/') + "/index.html";
+    context.Request.Path = path;
     await next();
 });
 
@@ -211,7 +125,7 @@ app.MapPut("/api/settings", (AudioControlService service, MainSettingsUpdateRequ
 app.MapPut("/api/outputs/{slotIndex:int}", (AudioControlService service, int slotIndex, OutputUpdateRequest request) => ExecuteAsync(() => service.UpdateOutputAsync(slotIndex, request)));
 app.MapPut("/api/device-profiles", (AudioControlService service, DeviceProfileUpdateRequest request) => ExecuteAsync(() => service.UpdateDeviceProfileAsync(request)));
 
-app.MapFallbackToFile("index.html");
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok", version = "astra" }));
 
 app.Run();
 

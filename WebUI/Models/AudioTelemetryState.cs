@@ -6,6 +6,9 @@ public sealed class AudioTelemetryState
 {
     public long TelemetryRevision { get; init; }
 
+    // Source generation beat (1–4), or 0 when disabled; not acoustic arrival time.
+    public int ManualSyncTickBeat { get; init; }
+
     public bool IsRunning { get; init; }
 
     public bool IsCalibrating { get; init; }

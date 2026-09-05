@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.75.0",
+    [string]$Version = "0.76.0",
     [string]$Runtime = "win-x64",
     [string]$Configuration = "Release",
     [switch]$SkipZip
@@ -11,6 +11,20 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $repoRoot "WebUI\WebUI.csproj"
 $publishDir = Join-Path $repoRoot "dist\portable\$Runtime\app"
 $zipPath = Join-Path $repoRoot "dist\portable\MultiAudioNouva-$Version-$Runtime-portable.zip"
+
+# Validate all cleanup targets before touching an existing portable build.
+$portableRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "dist\portable")) + [System.IO.Path]::DirectorySeparatorChar
+foreach ($target in @($publishDir, $zipPath)) {
+    if (-not [System.IO.Path]::GetFullPath($target).StartsWith($portableRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Publish target must remain inside dist/portable: $target"
+    }
+}
+if (Test-Path -LiteralPath $publishDir) {
+    $entries = @(Get-Item -LiteralPath $publishDir) + @(Get-ChildItem -LiteralPath $publishDir -Recurse -Force)
+    if ($entries | Where-Object { $_.Attributes -band [System.IO.FileAttributes]::ReparsePoint }) {
+        throw "Refusing to clean a portable directory containing junctions or symbolic links."
+    }
+}
 
 function Stop-PortableAppProcesses {
     param(

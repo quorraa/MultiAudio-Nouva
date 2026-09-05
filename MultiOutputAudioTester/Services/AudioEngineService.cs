@@ -25,8 +25,7 @@ public sealed class AudioEngineService : IAsyncDisposable
     private bool _manualSyncTickEnabled;
     private float[] _manualSyncMixScratch = Array.Empty<float>();
     private long _manualSyncTickFrame;
-    private int _manualSyncTickRemainingFrames;
-    private uint _manualSyncNoiseState = 0x6D2B79F5u;
+    private long _manualSyncTickGeneration;
 
     public AudioEngineService(AppLogger logger)
     {
@@ -406,12 +405,37 @@ public sealed class AudioEngineService : IAsyncDisposable
 
     private void DispatchSamples(float[] sampleBuffer, int samplesRead, byte[] byteBuffer)
     {
-        var dispatchBuffer = ApplyManualSyncTick(sampleBuffer, samplesRead);
-        Buffer.BlockCopy(dispatchBuffer, 0, byteBuffer, 0, samplesRead * sizeof(float));
+        bool tickEnabled;
+        long startFrame, generation;
+        lock (_sync)
+        {
+            tickEnabled = _manualSyncTickEnabled;
+            startFrame = _manualSyncTickFrame;
+            generation = _manualSyncTickGeneration;
+        }
+        if (!tickEnabled)
+            Buffer.BlockCopy(sampleBuffer, 0, byteBuffer, 0, samplesRead * sizeof(float));
 
         foreach (var pipeline in _outputPipelines)
         {
+            if (tickEnabled)
+            {
+                var dispatchBuffer = ApplyManualSyncTick(sampleBuffer, samplesRead, startFrame, pipeline.SlotIndex);
+                lock (_sync)
+                {
+                    if (!_manualSyncTickEnabled || generation != _manualSyncTickGeneration)
+                        dispatchBuffer = sampleBuffer;
+                }
+                // AddSamples copies the bytes before this scratch buffer is reused.
+                Buffer.BlockCopy(dispatchBuffer, 0, byteBuffer, 0, samplesRead * sizeof(float));
+            }
             pipeline.AddSamples(byteBuffer, samplesRead * sizeof(float));
+        }
+        lock (_sync)
+        {
+            // Advance once per source block, never once per output.
+            if (tickEnabled && _manualSyncTickEnabled && generation == _manualSyncTickGeneration)
+                _manualSyncTickFrame = startFrame + samplesRead / _internalFormat.Channels;
         }
 
         var peak = 0f;
@@ -427,58 +451,32 @@ public sealed class AudioEngineService : IAsyncDisposable
         CaptureLevelChanged?.Invoke(this, peak);
     }
 
-    private float[] ApplyManualSyncTick(float[] sourceBuffer, int samplesRead)
+    public int ManualSyncTickBeat
     {
-        bool enabled;
-        lock (_sync)
+        get
         {
-            enabled = _manualSyncTickEnabled;
+            lock (_sync)
+                return _manualSyncTickEnabled
+                    ? SyncTickPattern.BeatAt(Math.Max(0, _manualSyncTickFrame - 1), _internalFormat.SampleRate)
+                    : 0;
         }
+    }
 
-        if (!enabled || samplesRead <= 0)
-        {
-            return sourceBuffer;
-        }
-
+    private float[] ApplyManualSyncTick(float[] sourceBuffer, int samplesRead, long startFrame, int slotIndex)
+    {
         if (_manualSyncMixScratch.Length < samplesRead)
-        {
             _manualSyncMixScratch = new float[samplesRead];
-        }
-
         Array.Copy(sourceBuffer, _manualSyncMixScratch, samplesRead);
-
-        const int tickIntervalFrames = 48000;
-        const int tickDurationFrames = 1800;
-        const double baseAmplitude = 0.18;
         var framesRead = samplesRead / _internalFormat.Channels;
-
         for (var frame = 0; frame < framesRead; frame++)
         {
-            if (_manualSyncTickRemainingFrames <= 0 && _manualSyncTickFrame % tickIntervalFrames == 0)
+            var tick = SyncTickPattern.SampleAt(startFrame + frame, _internalFormat.SampleRate, slotIndex);
+            if (tick == 0) continue;
+            for (var channel = 0; channel < _internalFormat.Channels; channel++)
             {
-                _manualSyncTickRemainingFrames = tickDurationFrames;
+                var index = frame * _internalFormat.Channels + channel;
+                _manualSyncMixScratch[index] = Math.Clamp(_manualSyncMixScratch[index] + tick, -1f, 1f);
             }
-
-            if (_manualSyncTickRemainingFrames > 0)
-            {
-                var age = tickDurationFrames - _manualSyncTickRemainingFrames;
-                var envelope = Math.Exp(-age / 360.0);
-                var noise = NextSignedNoise();
-                var metallic = Math.Sin((_manualSyncTickFrame * Math.PI * 2 * 7900.0) / _internalFormat.SampleRate)
-                    + (0.45 * Math.Sin((_manualSyncTickFrame * Math.PI * 2 * 11300.0) / _internalFormat.SampleRate));
-                var tick = (float)((noise * 0.72 + metallic * 0.28) * envelope * baseAmplitude);
-
-                var sampleIndex = frame * _internalFormat.Channels;
-                for (var channel = 0; channel < _internalFormat.Channels; channel++)
-                {
-                    var index = sampleIndex + channel;
-                    _manualSyncMixScratch[index] = Math.Clamp(_manualSyncMixScratch[index] + tick, -1f, 1f);
-                }
-
-                _manualSyncTickRemainingFrames--;
-            }
-
-            _manualSyncTickFrame++;
         }
 
         return _manualSyncMixScratch;
@@ -488,16 +486,7 @@ public sealed class AudioEngineService : IAsyncDisposable
     {
         _manualSyncTickEnabled = false;
         _manualSyncTickFrame = 0;
-        _manualSyncTickRemainingFrames = 0;
-        _manualSyncNoiseState = 0x6D2B79F5u;
-    }
-
-    private float NextSignedNoise()
-    {
-        _manualSyncNoiseState ^= _manualSyncNoiseState << 13;
-        _manualSyncNoiseState ^= _manualSyncNoiseState >> 17;
-        _manualSyncNoiseState ^= _manualSyncNoiseState << 5;
-        return ((_manualSyncNoiseState & 0xFFFF) / 32767.5f) - 1f;
+        _manualSyncTickGeneration++;
     }
 
     private async Task MonitorOutputsAsync(CancellationToken cancellationToken)

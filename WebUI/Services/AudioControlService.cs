@@ -74,11 +74,13 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
     private string _calibrationProgressMessage = "Calibration idle.";
     private string _lastErrorMessage = string.Empty;
     private CancellationTokenSource? _saveDebounceCts;
+    private Task _pendingSave = Task.CompletedTask;
     private CancellationTokenSource? _calibrationCts;
     private int _broadcastScheduled;
     private int _telemetryBroadcastScheduled;
     private long _stateRevision;
     private long _telemetryRevision;
+    private int _disposed;
 
     public AudioControlService(
         AppLogger logger,
@@ -118,7 +120,15 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _saveDebounceCts?.Cancel();
+        AppConfig finalConfig;
+        lock (_sync)
+        {
+            _saveDebounceCts?.Cancel();
+            _calibrationCts?.Cancel();
+            finalConfig = BuildConfigLocked();
+        }
+        await _pendingSave;
+        await _configurationService.SaveAsync(finalConfig);
 
         try
         {
@@ -132,8 +142,9 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _saveDebounceCts?.Cancel();
-        _saveDebounceCts?.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        lock (_sync) { _saveDebounceCts?.Cancel(); }
+        await _pendingSave;
         _operationGate.Dispose();
         _pingGate.Dispose();
 
@@ -153,17 +164,23 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             var lockedOutputCount = _outputs.Count(output => output.SyncLockState == SyncLockState.Locked);
             var lowConfidenceOutputCount = _outputs.Count(output => output.SyncLockState == SyncLockState.LowConfidence);
             var faultedOutputCount = _outputs.Count(output => output.SyncLockState == SyncLockState.Faulted);
+            var outputsReady = _outputs.Count > 0 && _outputs.All(output =>
+                _playbackDevices.Any(device => device.IsActive && StringEquals(device.Id, output.SelectedDeviceId)));
+            var inputReady = _useTestTone || _inputDevices.Any(device =>
+                device.IsActive && StringEquals(device.Id, _selectedInputDeviceId));
+            var microphoneReady = _inputDevices.Any(device =>
+                device.IsActive && StringEquals(device.Id, _selectedCalibrationInputDeviceId));
 
             return new AudioDashboardState
             {
                 StateRevision = _stateRevision,
                 IsRunning = _isRunning,
                 IsCalibrating = _isCalibrating,
-                CanStart = !_isRunning && !_isCalibrating,
+                CanStart = !_isRunning && !_isCalibrating && outputsReady && inputReady,
                 CanStop = _isRunning,
                 CanRefreshDevices = !_isRunning && !_isCalibrating,
                 CanAddOutput = !_isRunning && !_isCalibrating,
-                CanRunCalibration = !_isCalibrating,
+                CanRunCalibration = !_isCalibrating && outputsReady && microphoneReady,
                 CanEditTopology = !_isRunning && !_isCalibrating,
                 CanToggleManualSyncTick = _isRunning && !_isCalibrating,
                 ManualSyncTickEnabled = _manualSyncTickEnabled,
@@ -201,6 +218,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
             return new AudioTelemetryState
             {
                 TelemetryRevision = _telemetryRevision,
+                ManualSyncTickBeat = _audioEngineService.ManualSyncTickBeat,
                 IsRunning = _isRunning,
                 IsCalibrating = _isCalibrating,
                 CaptureLevel = _captureLevel,
@@ -309,6 +327,9 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     public async Task<AudioDashboardState> UpdateSettingsAsync(MainSettingsUpdateRequest request)
     {
+        if (!double.IsFinite(request.MasterVolumePercent) || !double.IsFinite(request.MarkerLevelPercent)
+            || !Enum.IsDefined(request.AutoSyncMode))
+            throw new InvalidOperationException("Volume, marker level, and sync mode must be valid values.");
         await _operationGate.WaitAsync();
 
         try
@@ -450,6 +471,8 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     public async Task<AudioDashboardState> UpdateOutputAsync(int slotIndex, OutputUpdateRequest request)
     {
+        if (!double.IsFinite(request.VolumePercent))
+            throw new InvalidOperationException("Output volume must be a finite number.");
         await _operationGate.WaitAsync();
 
         try
@@ -473,6 +496,10 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
                 {
                     throw new InvalidOperationException("Change playback device assignments only while the engine is stopped.");
                 }
+
+                if (normalizedDeviceId is not null && _outputs.Any(candidate =>
+                    candidate.SlotIndex != slotIndex && StringEquals(candidate.SelectedDeviceId, normalizedDeviceId)))
+                    throw new InvalidOperationException("Each output route must use a different playback device.");
 
                 output.SelectedDeviceId = normalizedDeviceId;
                 output.VolumePercent = Math.Clamp(request.VolumePercent, 0, 100);
@@ -703,7 +730,7 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
                 _manualSyncTickEnabled = !_manualSyncTickEnabled;
                 enabled = _manualSyncTickEnabled;
                 _sessionStatusMessage = enabled
-                    ? "Manual sync tick enabled on live outputs."
+                    ? "Speaker clicks enabled: output 1 low, 2 mid, 3 high, 4 bright; beat 1 accented every four seconds."
                     : "Manual sync tick disabled.";
                 _lastErrorMessage = string.Empty;
             }
@@ -1746,41 +1773,35 @@ public sealed class AudioControlService : IHostedService, IAsyncDisposable
 
     private void SaveConfigSoon()
     {
-        CancellationTokenSource cts;
-        AppConfig configToSave;
-
         lock (_sync)
         {
             _config = BuildConfigLocked();
-            configToSave = _config;
+            var configToSave = _config;
             _saveDebounceCts?.Cancel();
-            _saveDebounceCts?.Dispose();
-            _saveDebounceCts = new CancellationTokenSource();
-            cts = _saveDebounceCts;
-        }
-
-        _ = Task.Run(async () =>
-        {
-            try
+            var cts = new CancellationTokenSource();
+            _saveDebounceCts = cts;
+            var previousSave = _pendingSave;
+            // Keep writes ordered even when a prior debounce has already elapsed.
+            _pendingSave = Task.Run(async () =>
             {
-                await Task.Delay(350, cts.Token);
-                await _configurationService.SaveAsync(configToSave);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            finally
-            {
-                cts.Dispose();
-                lock (_sync)
+                try
                 {
-                    if (ReferenceEquals(_saveDebounceCts, cts))
+                    await previousSave;
+                    await Task.Delay(350, cts.Token);
+                    await _configurationService.SaveAsync(configToSave);
+                }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    lock (_sync)
                     {
-                        _saveDebounceCts = null;
+                        if (ReferenceEquals(_saveDebounceCts, cts))
+                            _saveDebounceCts = null;
+                        cts.Dispose();
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
     private AppConfig BuildConfigLocked()
